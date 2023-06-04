@@ -4,8 +4,10 @@ import {
   classesFile,
   createRenderDataEntry,
   isConstantArray,
+  isFunction,
   isInlineStruct,
   isInlineTemplateStruct,
+  isPointer,
   isStruct,
   isStructLike,
   isTypedef,
@@ -35,12 +37,10 @@ export const renderTypedef = (
   const nameBuffer = `${name}Buffer`;
   const dependencies = new Set<string>();
   if (typeof target === "string") {
-    const typesDefinition = `export const ${nameT} = ${
-      renderTypeAsFfi(dependencies, importsInTypesFile, target)
-    };
-export type ${name} = ${
-      renderTypeAsTS(dependencies, importsInTypesFile, target)
-    };
+    const typesDefinition = `export const ${nameT} = ${renderTypeAsFfi(dependencies, importsInTypesFile, target)
+      };
+export type ${name} = ${renderTypeAsTS(dependencies, importsInTypesFile, target)
+      };
 `;
     entriesInTypesFile.push(
       createRenderDataEntry([nameT, name], [...dependencies], typesDefinition),
@@ -164,7 +164,7 @@ export type ${namePointer} = ${targetPointer};
     return;
   }
 
-  const refT = renderTypeAsFfi(dependencies, importsInTypesFile, target);
+  const refT = renderTypeAsFfi(dependencies, importsInTypesFile, isPointer(target) && isFunction(target.pointee) ? target.pointee : target);
   if (
     (isStruct(target) || isInlineStruct(target) ||
       isInlineTemplateStruct(target) ||
@@ -208,8 +208,7 @@ export type ${namePointer} = ${targetPointer};
     const typesEntry = createRenderDataEntry(
       [NAME_SIZE, nameT, namePointer],
       [...dependencies],
-      `export const ${NAME_SIZE} = ${
-        entry.cursor.getType()!.getSizeOf()
+      `export const ${NAME_SIZE} = ${entry.cursor.getType()!.getSizeOf()
       } as const;
 export const ${nameT} = ${refT}${asConst};
 declare const ${name}: unique symbol;
@@ -219,10 +218,17 @@ export type ${namePointer} = NonNullable<Deno.PointerValue> & { [${name}]: unkno
     entriesInTypesFile.push(typesEntry);
     return;
   }
+
+  if (isFunction(target) || isPointer(target) && isFunction(target.pointee)) {
+    entriesInTypesFile.push(createRenderDataEntry([nameT, name], [...dependencies], `export const ${nameT} = ${refT} as const;
+declare const ${name}_: unique symbol;
+export type ${name} = NonNullable<Deno.PointerValue> & { [${name}_]: unknown };
+`));
+    return;
+  }
   const ref = renderTypeAsTS(dependencies, importsInTypesFile, target);
-  const typesDefinition = `export const ${nameT} = ${refT}${
-    refT.endsWith("}") ? " as const" : ""
-  };
+  const typesDefinition = `export const ${nameT} = ${refT}${refT.endsWith("}") ? " as const" : ""
+    };
 export type ${name} = ${ref};
 `;
   entriesInTypesFile.push(

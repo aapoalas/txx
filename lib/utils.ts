@@ -193,7 +193,7 @@ const isClassReturnedInRegisters = (
       }
     } else if (
       child.kind === CXCursorKind.CXCursor_Constructor &&
-        (child.isCopyConstructor() || child.isMoveConstructor()) ||
+      (child.isCopyConstructor() || child.isMoveConstructor()) ||
       child.kind === CXCursorKind.CXCursor_Destructor
     ) {
       // TODO: Should check if all constructors are deleted.
@@ -347,12 +347,12 @@ export const isPointerToStructLike = (
   entry: null | "self" | TypeEntry,
 ): entry is PointerTypeEntry & {
   pointee:
-    | ConstantArrayTypeEntry
-    | ClassEntry
-    | InlineClassTypeEntry
-    | InlineClassTemplateTypeEntry
-    | InlineUnionTypeEntry
-    | TypedefEntry;
+  | ConstantArrayTypeEntry
+  | ClassEntry
+  | InlineClassTypeEntry
+  | InlineClassTemplateTypeEntry
+  | InlineUnionTypeEntry
+  | TypedefEntry;
 } =>
   isPointer(entry) && (entry.pointee === "self" || isStructLike(entry.pointee));
 
@@ -398,5 +398,56 @@ export const sortRenderDataEntries = (
       // No need to move: Step to next.
       i++;
     }
+  }
+};
+
+/**
+ * Get size of TypeEntry in bytes
+ */
+export const getSizeOfType = (entry: null | TypeEntry): number => {
+  if (entry === null) {
+    return 1;
+  } else if (typeof entry === "string") {
+    switch (entry) {
+      case "bool":
+      case "u8":
+      case "i8":
+        return 1;
+      case "u16":
+      case "i16":
+        return 2;
+      case "f32":
+      case "u32":
+      case "i32":
+        return 4;
+      case "f64":
+      case "u64":
+      case "i64":
+      case "buffer":
+      case "pointer":
+      case "cstring":
+      case "cstringArray":
+        return 8;
+      default:
+        throw new Error("Unimplemented");
+    }
+  }
+  switch (entry.kind) {
+    case "fn":
+    case "function":
+    case "pointer":
+    case "member pointer":
+      return 8;
+    case "class":
+    case "class<T>":
+    case "enum":
+      return entry.cursor.getType()!.getSizeOf();
+    case "[N]":
+    case "inline class":
+    case "inline class<T>":
+    case "inline union":
+      return entry.type.getSizeOf();
+    case "typedef":
+      return getSizeOfType(entry.target);
   }
 };

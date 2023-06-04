@@ -59,7 +59,7 @@ export interface BaseEntry {
 
 export interface ClassEntry extends BaseEntry {
   kind: "class";
-  bases: (ClassEntry | TypedefEntry)[];
+  bases: BaseClassEntry[];
   constructors: ClassConstructor[];
   destructor: null | ClassDestructor;
   fields: ClassField[];
@@ -93,14 +93,26 @@ export interface ClassMethod {
   result: null | TypeEntry;
 }
 
+export type BaseClassEntry = ClassEntry | ClassTemplateEntry | TypedefEntry;
+
 export interface ClassTemplateEntry extends BaseEntry {
   kind: "class<T>";
-  bases: ClassEntry[];
+  bases: BaseClassEntry[];
   constructors: ClassConstructor[];
   destructor: null | ClassDestructor;
   parameters: TemplateParameter[];
   fields: ClassField[];
   methods: ClassMethod[];
+  partialSpecializations: ClassTemplatePartialSpecialization[];
+}
+
+export interface ClassTemplatePartialSpecialization {
+  kind: "partial class<T>";
+  bases: BaseClassEntry[];
+  cursor: CXCursor;
+  fields: ClassField[];
+  parameters: TemplateParameter[];
+  used: boolean;
 }
 
 export interface ClassTemplateConstructor {
@@ -178,6 +190,12 @@ export interface InlineUnionTypeEntry {
   type: CXType;
 }
 
+export interface MemberPointerTypeEntry {
+  name?: never;
+  kind: "member pointer";
+  type: CXType;
+}
+
 export interface PointerTypeEntry {
   name?: never;
   kind: "pointer";
@@ -205,6 +223,7 @@ export type PlainTypeString =
 export type TypeEntry =
   | PlainTypeString
   | ClassEntry
+  | ClassTemplateEntry
   | FunctionEntry
   | EnumEntry
   | ConstantArrayTypeEntry
@@ -212,6 +231,7 @@ export type TypeEntry =
   | InlineClassTypeEntry
   | InlineClassTemplateTypeEntry
   | InlineUnionTypeEntry
+  | MemberPointerTypeEntry
   | PointerTypeEntry
   | TypedefEntry;
 

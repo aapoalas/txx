@@ -1,6 +1,7 @@
 import { ImportMap, TypedefEntry, TypeEntry } from "../types.d.ts";
 import {
   classesFile,
+  getSizeOfType,
   isFunction,
   isPointer,
   isStructLike,
@@ -95,7 +96,7 @@ export const renderTypeAsFfi = (
       ))})`;
     } else if (type.pointee.kind === "function" || type.pointee.kind === "fn") {
       // Function pointer is just a function.
-      return renderTypeAsFfi(dependencies, importMap, type.pointee);
+      return `func(${renderTypeAsFfi(dependencies, importMap, type.pointee)})`;
     } else if (type.pointee.kind === "typedef") {
       const isPODType = type.pointee.cursor.getType()!.isPODType();
       if (isPODType) {
@@ -121,8 +122,20 @@ export const renderTypeAsFfi = (
       } else {
         return renderTypeAsFfi(dependencies, importMap, "buffer");
       }
+    } else if (isStructLike(type.pointee)) {
+      importMap.set("buf", SYSTEM_TYPES);
+      return `buf(${(renderTypeAsFfi(
+        dependencies,
+        importMap,
+        type.pointee,
+      ))})`;
     } else {
-      throw new Error("Unreachable");
+      importMap.set("ptr", SYSTEM_TYPES);
+      return `ptr(${(renderTypeAsFfi(
+        dependencies,
+        importMap,
+        type.pointee,
+      ))})`;
     }
   } else if (type.kind === "function" || type.kind === "fn") {
     return `{ parameters: [${
@@ -135,12 +148,15 @@ export const renderTypeAsFfi = (
     const templateT = `${type.template.name}T`;
     importMap.set(templateT, typesFile(type.template.file));
     dependencies.add(templateT);
+    const bases = type.template.bases.map((base) =>
+      renderTypeAsFfi(dependencies, importMap, base)
+    );
     return `${templateT}(${
-      type.parameters.map((param) =>
+      bases.concat(type.parameters.map((param) =>
         param.kind === "parameter"
           ? renderTypeAsFfi(dependencies, importMap, param.type)
           : param.name
-      )
+      ))
         .join(
           ", ",
         )
@@ -159,15 +175,24 @@ export const renderTypeAsFfi = (
       new Array(type.length).fill(fieldString).join(",\n")
     }] }`;
   } else if (type.kind === "inline union") {
-    const count = type.fields.length;
+    const uniqueSortedFields = [
+      ...new Set(
+        type.fields.sort((a, b) =>
+          getSizeOfType(b.type) - getSizeOfType(a.type)
+        ).map((field) => renderTypeAsFfi(dependencies, importMap, field.type)),
+      ),
+    ];
+    const count = uniqueSortedFields.length;
     importMap.set(`union${count}`, SYSTEM_TYPES);
     return `union${count}(${
-      type.fields.map((field) =>
-        renderTypeAsFfi(dependencies, importMap, field.type)
-      ).join(
+      uniqueSortedFields.join(
         ", ",
       )
     })`;
+  } else if (type.kind === "member pointer") {
+    return `{ struct: ["pointer", "usize"] }`;
+  } else if (type.kind === "class<T>") {
+    return `${type.name}T`;
   } else {
     throw new Error(
       // @ts-expect-error kind and name will exist in any added TypeEntry types
@@ -238,6 +263,11 @@ export const renderTypeAsTS = (
   } else if (
     type.kind === "function" || type.kind === "fn"
   ) {
+    if ("name" in type && type.name) {
+      importMap.set(type.name, typesFile(type.file));
+      dependencies.add(type.name);
+      return type.name;
+    }
     return "Deno.PointerValue";
   } else if (type.kind === "pointer") {
     if (type.pointee === "self") {
@@ -258,6 +288,8 @@ export const renderTypeAsTS = (
         dependencies.add(name);
         return name;
       }
+    } else if (isFunction(type.pointee)) {
+      return renderTypeAsTS(dependencies, importMap, type.pointee);
     }
     return "Deno.PointerValue";
   } else if (type.kind === "class") {
@@ -267,12 +299,17 @@ export const renderTypeAsTS = (
     return name;
   } else if (
     type.kind === "inline class" || type.kind === "inline class<T>" ||
-    type.kind === "[N]"
+    type.kind === "[N]" || type.kind === "inline union"
   ) {
     return "Uint8Array";
+  } else if (type.kind === "member pointer") {
+    return "number";
+  } else if (type.kind === "class<T>") {
+    throw new Error("Unexpected class template entry");
   } else {
     throw new Error(
-      "internal error: unknown type kind",
+      // @ts-expect-error No type kind should exist here
+      `internal error: unknown type kind ${type.kind} ${type.name}`,
     );
   }
 };
