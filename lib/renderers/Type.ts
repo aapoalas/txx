@@ -172,14 +172,14 @@ export const renderTypeAsFfi = (
   } else if (type.kind === "[N]") {
     const fieldString = renderTypeAsFfi(dependencies, importMap, type.element);
     return `{ struct: [${
-      new Array(type.length).fill(fieldString).join(",\n")
+      new Array(type.length).fill(fieldString).join(",")
     }] }`;
   } else if (type.kind === "inline union") {
     const uniqueSortedFields = [
       ...new Set(
-        type.fields.sort((a, b) =>
-          getSizeOfType(b.type) - getSizeOfType(a.type)
-        ).map((field) => renderTypeAsFfi(dependencies, importMap, field.type)),
+        type.fields.sort((a, b) => {
+          return getSizeOfType(b.type) - getSizeOfType(a.type);
+        }).map((field) => renderTypeAsFfi(dependencies, importMap, field.type)),
       ),
     ];
     const count = uniqueSortedFields.length;
@@ -190,8 +190,11 @@ export const renderTypeAsFfi = (
       )
     })`;
   } else if (type.kind === "member pointer") {
-    return `{ struct: ["pointer", "usize"] }`;
+    importMap.set("ptr", SYSTEM_TYPES);
+    return `ptr("member pointer")`;
   } else if (type.kind === "class<T>") {
+    importMap.set(`${type.name}T`, typesFile(type.file));
+    importMap.set("ptr", SYSTEM_TYPES);
     return `${type.name}T`;
   } else {
     throw new Error(

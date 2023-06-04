@@ -193,7 +193,7 @@ const isClassReturnedInRegisters = (
       }
     } else if (
       child.kind === CXCursorKind.CXCursor_Constructor &&
-      (child.isCopyConstructor() || child.isMoveConstructor()) ||
+        (child.isCopyConstructor() || child.isMoveConstructor()) ||
       child.kind === CXCursorKind.CXCursor_Destructor
     ) {
       // TODO: Should check if all constructors are deleted.
@@ -347,12 +347,12 @@ export const isPointerToStructLike = (
   entry: null | "self" | TypeEntry,
 ): entry is PointerTypeEntry & {
   pointee:
-  | ConstantArrayTypeEntry
-  | ClassEntry
-  | InlineClassTypeEntry
-  | InlineClassTemplateTypeEntry
-  | InlineUnionTypeEntry
-  | TypedefEntry;
+    | ConstantArrayTypeEntry
+    | ClassEntry
+    | InlineClassTypeEntry
+    | InlineClassTemplateTypeEntry
+    | InlineUnionTypeEntry
+    | TypedefEntry;
 } =>
   isPointer(entry) && (entry.pointee === "self" || isStructLike(entry.pointee));
 
@@ -445,8 +445,11 @@ export const getSizeOfType = (entry: null | TypeEntry): number => {
     case "[N]":
     case "inline class":
     case "inline class<T>":
-    case "inline union":
       return entry.type.getSizeOf();
+    case "inline union":
+      return Math.max(
+        ...entry.fields.map((field) => getSizeOfType(field.type)),
+      );
     case "typedef":
       return getSizeOfType(entry.target);
   }

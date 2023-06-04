@@ -6,7 +6,10 @@ import {
   CXChildVisitResult,
   CXCursorKind,
 } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
-import { CXCursor } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
+import {
+  CXCursor,
+  CXType,
+} from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
 import { SEP } from "../Context.ts";
 import {
   ClassEntry,
@@ -21,6 +24,7 @@ import {
   createDummyRenderDataEntry,
   createRenderDataEntry,
   FFI,
+  getCursorFileLocation,
   isPointer,
   isPointerToStructLike,
   isReturnedInRegisters,
@@ -70,10 +74,17 @@ export const renderClass = ({
     const BaseT = `${base.name}T`;
     const BasePointer = `${base.name}Pointer`;
     inheritedPointers.push(BasePointer);
-    importsInTypesFile.set(BasePointer, typesFile(base.file));
-    importsInTypesFile.set(BaseT, typesFile(base.file));
+    let baseType: CXType;
+    if (base.kind === "inline class<T>") {
+      importsInTypesFile.set(BasePointer, typesFile(base.template.file));
+      importsInTypesFile.set(BaseT, typesFile(base.template.file));
+      baseType = base.template.cursor.getType()!;
+    } else {
+      importsInTypesFile.set(BasePointer, typesFile(base.file));
+      importsInTypesFile.set(BaseT, typesFile(base.file));
+      baseType = base.cursor.getType()!;
+    }
 
-    const baseType = base.cursor.getType()!;
     const size = baseType.getSizeOf();
     const align = baseType.getAlignOf();
     fields.push(

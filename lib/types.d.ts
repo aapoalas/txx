@@ -93,7 +93,10 @@ export interface ClassMethod {
   result: null | TypeEntry;
 }
 
-export type BaseClassEntry = ClassEntry | ClassTemplateEntry | TypedefEntry;
+export type BaseClassEntry =
+  | ClassEntry
+  | InlineClassTemplateTypeEntry
+  | TypedefEntry;
 
 export interface ClassTemplateEntry extends BaseEntry {
   kind: "class<T>";
@@ -143,6 +146,7 @@ export interface ClassTemplateMethod {
 export interface TemplateParameter {
   name: string;
   kind: "<T>";
+  isSpread?: boolean;
 }
 
 export interface Parameter {
@@ -169,17 +173,19 @@ export interface FunctionTypeEntry {
 }
 
 export interface InlineClassTypeEntry {
-  name?: never;
-  kind: "inline class";
   fields: ClassField[];
+  kind: "inline class";
+  name?: never;
   type: CXType;
 }
 
 export interface InlineClassTemplateTypeEntry {
-  name?: never;
+  file: AbsoluteFilePath;
   kind: "inline class<T>";
-  template: ClassTemplateEntry;
+  name?: string;
+  nsName?: string;
   parameters: (Parameter | TemplateParameter)[];
+  template: ClassTemplateEntry;
   type: CXType;
 }
 

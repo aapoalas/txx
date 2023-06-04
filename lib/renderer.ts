@@ -126,22 +126,22 @@ export const renderSystemFileConstant = (constant: string): RenderDataEntry => {
       break;
     case "union2":
       contents =
-        `export const union2 = <const T, const U>(a: T, b: U): T | U => a;
+        `export const union2 = <const T, const U>(a: T, _b: U): T | U => a;
 `;
       break;
     case "union3":
       contents =
-        `export const union3 = <const T, const U, const V>(a: T, b: U, c: V): T | U | V => a;
+        `export const union3 = <const T, const U, const V>(a: T, _b: U, _c: V): T | U | V => a;
 `;
       break;
     case "union4":
       contents =
-        `export const union4 = <const T, const U, const V, const W>(a: T, b: U, c: V, d: W): T | U | V | W => a;
+        `export const union4 = <const T, const U, const V, const W>(a: T, _b: U, _c: V, _d: W): T | U | V | W => a;
 `;
       break;
     case "union5":
       contents =
-        `export const union5 = <const T, const U, const V, const W, const X>(a: T, b: U, c: V, d: W, e: X): T | U | V | W | X => a;
+        `export const union5 = <const T, const U, const V, const W, const X>(a: T, _b: U, _c: V, _d: W, _e: X): T | U | V | W | X => a;
 `;
       break;
     case "cstringT":
