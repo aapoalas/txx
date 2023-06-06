@@ -1,0 +1,8 @@
+{
+  "test": {
+    "include": ["tests"]
+  },
+  "tasks": {
+    "test": "LIBCLANG_PATH=/usr/lib deno test --unstable -A"
+  }
+}
