@@ -1,5 +1,3 @@
-export const buf = (_: unknown) => "buffer" as const;
-
 export const ptr = (_: unknown) => "pointer" as const;
 
 export const union3 = <const T, const U, const V>(
@@ -7,8 +5,6 @@ export const union3 = <const T, const U, const V>(
   _b: U,
   _c: V,
 ): T | U | V => a;
-
-export const union2 = <const T, const U>(a: T, _b: U): T | U => a;
 
 export const func = (_?: unknown) => "function" as const;
 
@@ -50,73 +46,12 @@ export const functionT = <const Signature>(
 ) =>
   ({
     struct: [
-      _Function_baseT, // base class, size 24, align 8
-      "buffer", // _M_invoker
+      { struct: [] }, // _M_invoker
     ],
   }) as const;
 
 export const _Manager_typeT = {
-  parameters: [
-    buf(
-      union2(
-        {
-          struct: [
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-          ],
-        },
-        union3(
-          "pointer",
-          func({ parameters: [], result: "void" }),
-          ptr("member pointer"),
-        ),
-      ),
-    ),
-    buf(
-      union2(
-        {
-          struct: [
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-            "i8",
-          ],
-        },
-        union3(
-          "pointer",
-          func({ parameters: [], result: "void" }),
-          ptr("member pointer"),
-        ),
-      ),
-    ),
-    _Manager_operationT,
-  ],
+  parameters: ["pointer", "pointer", _Manager_operationT],
   result: "bool",
 } as const;
 declare const _Manager_type_: unique symbol;
@@ -127,33 +62,16 @@ export type _Manager_type = NonNullable<Deno.PointerValue> & {
 export const FUNCTION_BASE_SIZE = 24 as const;
 export const _Function_baseT = {
   struct: [
-    union2(
-      {
-        struct: [
-          "i8",
-          "i8",
-          "i8",
-          "i8",
-          "i8",
-          "i8",
-          "i8",
-          "i8",
-          "i8",
-          "i8",
-          "i8",
-          "i8",
-          "i8",
-          "i8",
-          "i8",
-          "i8",
-        ],
-      },
-      union3(
-        "pointer",
-        func({ parameters: [], result: "void" }),
-        ptr("member pointer"),
-      ),
-    ), // _M_functor, offset 0, size 16, align 8
+    {
+      struct: [
+        union3(
+          "pointer",
+          func({ parameters: [], result: "void" }),
+          ptr("member pointer"),
+        ),
+        { struct: [] },
+      ],
+    }, // _M_functor, offset 0, size 16, align 8
     func(_Manager_typeT), // _M_manager, offset 16, size 8, align 8
   ],
 } as const;

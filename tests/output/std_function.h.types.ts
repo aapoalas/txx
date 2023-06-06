@@ -1,16 +1,30 @@
-import { functionPointer, functionT } from "./systemTypes.ts";
+export const NULLARY_CALLBACK_SIZE = 32 as const;
+export const NullaryCallbackT = { struct: [{ struct: [] }] } as const;
+declare const NullaryCallback: unique symbol;
+export type NullaryCallbackPointer = NonNullable<Deno.PointerValue> & {
+  [NullaryCallback]: unknown;
+};
 
-export const NullaryCallbackT = functionT;
-export type NullaryCallbackPointer = functionPointer;
+export const UNARY_CALLBACK_SIZE = 32 as const;
+export const UnaryCallbackT = { struct: [{ struct: [] }] } as const;
+declare const UnaryCallback: unique symbol;
+export type UnaryCallbackPointer = NonNullable<Deno.PointerValue> & {
+  [UnaryCallback]: unknown;
+};
 
-export const UnaryCallbackT = functionT;
-export type UnaryCallbackPointer = functionPointer;
+export const BINARY_CALLBACK_SIZE = 32 as const;
+export const BinaryCallbackT = { struct: [{ struct: [] }] } as const;
+declare const BinaryCallback: unique symbol;
+export type BinaryCallbackPointer = NonNullable<Deno.PointerValue> & {
+  [BinaryCallback]: unknown;
+};
 
-export const BinaryCallbackT = functionT;
-export type BinaryCallbackPointer = functionPointer;
-
-export const TernaryCallbackT = functionT;
-export type TernaryCallbackPointer = functionPointer;
+export const TERNARY_CALLBACK_SIZE = 32 as const;
+export const TernaryCallbackT = { struct: [{ struct: [] }] } as const;
+declare const TernaryCallback: unique symbol;
+export type TernaryCallbackPointer = NonNullable<Deno.PointerValue> & {
+  [TernaryCallback]: unknown;
+};
 
 export const MY_CLASS_SIZE = 128 as const;
 export const MyClassT = {

@@ -220,6 +220,7 @@ const gatherEntries = (context: Context, parentCursor: CXCursor) =>
         break;
       case CXCursorKind.CXCursor_ClassTemplatePartialSpecialization:
         context.addClassTemplatePartialSpecialization(cursor);
+        break;
       case CXCursorKind.CXCursor_FunctionTemplate:
         /**
          * TODO: Support templates

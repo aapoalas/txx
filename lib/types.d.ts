@@ -65,7 +65,7 @@ export interface ClassEntry extends BaseEntry {
   fields: ClassField[];
   methods: ClassMethod[];
   size: number;
-  virtualBases: (ClassEntry | TypedefEntry)[];
+  virtualBases: BaseClassEntry[];
 }
 
 export interface ClassConstructor {
@@ -107,6 +107,7 @@ export interface ClassTemplateEntry extends BaseEntry {
   fields: ClassField[];
   methods: ClassMethod[];
   partialSpecializations: ClassTemplatePartialSpecialization[];
+  virtualBases: BaseClassEntry[];
 }
 
 export interface ClassTemplatePartialSpecialization {
@@ -116,6 +117,7 @@ export interface ClassTemplatePartialSpecialization {
   fields: ClassField[];
   parameters: TemplateParameter[];
   used: boolean;
+  virtualBases: BaseClassEntry[];
 }
 
 export interface ClassTemplateConstructor {
@@ -173,6 +175,7 @@ export interface FunctionTypeEntry {
 }
 
 export interface InlineClassTypeEntry {
+  base: null | BaseClassEntry;
   fields: ClassField[];
   kind: "inline class";
   name?: never;
@@ -180,6 +183,7 @@ export interface InlineClassTypeEntry {
 }
 
 export interface InlineClassTemplateTypeEntry {
+  cursor: CXCursor;
   file: AbsoluteFilePath;
   kind: "inline class<T>";
   name?: string;

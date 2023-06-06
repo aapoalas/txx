@@ -24,7 +24,6 @@ import {
   createDummyRenderDataEntry,
   createRenderDataEntry,
   FFI,
-  getCursorFileLocation,
   isPointer,
   isPointerToStructLike,
   isReturnedInRegisters,
