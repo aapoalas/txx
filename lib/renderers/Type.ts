@@ -163,11 +163,14 @@ export const renderTypeAsFfi = (
     })`;
   } else if (type.kind === "inline class") {
     return `{ struct: [${
-      type.fields.map((field) =>
-        renderTypeAsFfi(dependencies, importMap, field.type)
-      ).join(
-        ", ",
-      )
+      (type.base ? [renderTypeAsFfi(dependencies, importMap, type.base)] : [])
+        .concat(
+          type.fields.map((field) =>
+            renderTypeAsFfi(dependencies, importMap, field.type)
+          ),
+        ).join(
+          ", ",
+        )
     }] }`;
   } else if (type.kind === "[N]") {
     const fieldString = renderTypeAsFfi(dependencies, importMap, type.element);

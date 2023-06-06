@@ -90,9 +90,6 @@ export class Context {
     const nsName = this.#nsStack.length
       ? `${this.#nsStack.join("::")}${SEP}${name}`
       : name;
-    if (name === "function") {
-      console.log("Adding function", getCursorFileLocation(cursor));
-    }
     const entry = {
       bases: [],
       constructors: [],
@@ -125,9 +122,6 @@ export class Context {
       throw new Error(
         `Could not find class template for ${getNamespacedName(cursor)}`,
       );
-    }
-    if (source.name === "function") {
-      console.log("Adding function spec", getCursorFileLocation(cursor));
     }
     source.partialSpecializations.push({
       bases: [],

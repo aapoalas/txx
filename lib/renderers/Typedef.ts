@@ -187,6 +187,7 @@ export type ${namePointer} = ${targetPointer};
   constructor(arg?: ArrayBufferLike | number) {
     if (typeof arg === "undefined") {
       super(${BUFFER_SIZE})
+      return;
     } else if (typeof arg === "number") {
       if (!Number.isFinite(arg) || arg < ${BUFFER_SIZE}) {
         throw new Error(
@@ -194,14 +195,14 @@ export type ${namePointer} = ${targetPointer};
         );
       }
       super(arg);
-    } else {
-      if (arg.byteLength < ${BUFFER_SIZE}) {
-        throw new Error(
-          "Invalid construction of ${nameBuffer}: Buffer size is too small",
-        );
-      }
-      super(arg);
+      return;
     }
+    if (arg.byteLength < ${BUFFER_SIZE}) {
+      throw new Error(
+        "Invalid construction of ${nameBuffer}: Buffer size is too small",
+      );
+    }
+    super(arg);
   }
 }
 `,

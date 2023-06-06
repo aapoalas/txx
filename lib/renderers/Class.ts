@@ -410,6 +410,7 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
   constructor(arg?: ArrayBufferLike | number) {
     if (typeof arg === "undefined") {
       super(${CLASS_SIZE})
+      return;
     } else if (typeof arg === "number") {
       if (!Number.isFinite(arg) || arg < ${CLASS_SIZE}) {
         throw new Error(
@@ -417,14 +418,14 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
         );
       }
       super(arg);
-    } else {
-      if (arg.byteLength < ${CLASS_SIZE}) {
-        throw new Error(
-          "Invalid construction of ${ClassBuffer}: Buffer size is too small",
-        );
-      }
-      super(arg);
+      return;
     }
+    if (arg.byteLength < ${CLASS_SIZE}) {
+      throw new Error(
+        "Invalid construction of ${ClassBuffer}: Buffer size is too small",
+      );
+    }
+    super(arg);
   }
 
 ${bufferEntryItems.join("\n")}}
