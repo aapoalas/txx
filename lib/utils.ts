@@ -238,7 +238,7 @@ export const getNamespacedName = (cursor: CXCursor): string => {
   const namespaceStack: string[] = [];
   let previousParent: null | CXCursor = null;
   while (parent && (!previousParent || !parent.equals(previousParent))) {
-    if (parent.kind === CXCursorKind.CXCursor_TranslationUnit) {
+    if (parent.isTranslationUnit()) {
       break;
     }
     if (
@@ -253,7 +253,7 @@ export const getNamespacedName = (cursor: CXCursor): string => {
     }
     previousParent = parent;
     parent = parent.getSemanticParent();
-    if (!parent || parent.kind === CXCursorKind.CXCursor_TranslationUnit) {
+    if (!parent || parent.isTranslationUnit()) {
       break;
     }
   }

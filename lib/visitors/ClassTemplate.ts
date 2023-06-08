@@ -7,6 +7,7 @@ import {
 import { Context } from "../Context.ts";
 import {
   ClassTemplateEntry,
+  ClassTemplatePartialSpecialization,
   InlineClassTemplateTypeEntry,
   TemplateParameter,
   TypeEntry,
@@ -15,32 +16,39 @@ import { getNamespacedName } from "../utils.ts";
 import { visitBaseClass } from "./Class.ts";
 import { createInlineTypeEntry, visitType } from "./Type.ts";
 
-export const visitClassTemplate = (
+export const visitClassTemplateCursor = (
   context: Context,
-  nsName: string,
-  templateCursor?: CXCursor,
+  cursor: CXCursor,
 ): ClassTemplateEntry => {
-  const classTemplateEntry = templateCursor
-    ? context.findClassTemplateByCursor(templateCursor)
-    : context.findClassTemplateByName(nsName);
-  let foundPartialSpecialization = classTemplateEntry && templateCursor
+  const classTemplateEntry = context.findClassTemplateByCursor(cursor);
+  const foundPartialSpecialization = classTemplateEntry && cursor
     ? classTemplateEntry.partialSpecializations.find((entry) =>
-      entry.cursor.equals(templateCursor)
+      entry.cursor.equals(cursor)
     )
     : undefined;
   if (!classTemplateEntry) {
-    throw new Error(`Could not find class template '${nsName}'`);
+    throw new Error(
+      `Could not find class template '${getNamespacedName(cursor)}'`,
+    );
   }
 
-  if (classTemplateEntry.name === "function" && !foundPartialSpecialization) {
-    console.trace();
-  }
+  return visitClassTemplateEntry(
+    context,
+    classTemplateEntry,
+    foundPartialSpecialization,
+  );
+};
 
+export const visitClassTemplateEntry = (
+  context: Context,
+  classTemplateEntry: ClassTemplateEntry,
+  partialSpecialization?: ClassTemplatePartialSpecialization,
+): ClassTemplateEntry => {
   if (
-    !foundPartialSpecialization &&
+    !partialSpecialization &&
     classTemplateEntry.partialSpecializations.length === 1
   ) {
-    foundPartialSpecialization = classTemplateEntry.partialSpecializations[0];
+    partialSpecialization = classTemplateEntry.partialSpecializations[0];
   }
 
   if (classTemplateEntry.partialSpecializations.length > 1) {
@@ -69,8 +77,6 @@ export const visitClassTemplate = (
       });
     }
   }
-
-  const partialSpecialization = foundPartialSpecialization;
 
   const visitBasesAndFields = !classTemplateEntry.used;
   const visitPartialSpecializationFieldsAndBases = partialSpecialization
@@ -184,7 +190,8 @@ export const visitClassTemplate = (
       ) {
         classTemplateEntry.parameters.push({
           kind: "<T>",
-          name: gc.getSpelling(),
+          name: gc.getSpelling().replace("...", ""),
+          isSpread: gc.getSpelling().includes("..."),
         });
       }
       return CXChildVisitResult.CXChildVisit_Continue;
@@ -205,9 +212,9 @@ export const visitClassTemplate = (
       try {
         const { isVirtualBase, baseClass } = visitBaseClass(context, gc);
         if (isVirtualBase) {
-          partialSpecialization.virtualBases.push(baseClass);
+          partialSpecialization!.virtualBases.push(baseClass);
         } else {
-          partialSpecialization.virtualBases.push(baseClass);
+          partialSpecialization!.bases.push(baseClass);
         }
       } catch (err) {
         const baseError = new Error(
@@ -258,7 +265,7 @@ export const visitClassTemplate = (
       if (typeof field === "object" && "used" in field) {
         field.used = true;
       }
-      partialSpecialization.fields.push({
+      partialSpecialization!.fields.push({
         cursor: gc,
         name: gc.getSpelling(),
         type: field,
@@ -267,7 +274,7 @@ export const visitClassTemplate = (
       gc.kind === CXCursorKind.CXCursor_TemplateTypeParameter &&
       visitPartialSpecializationFieldsAndBases
     ) {
-      partialSpecialization.parameters.push({
+      partialSpecialization!.parameters.push({
         kind: "<T>",
         name: gc.getSpelling(),
         isSpread: gc.getPrettyPrinted().includes("typename ..."),
@@ -283,13 +290,6 @@ export const visitClassTemplateInstance = (
   instance: CXCursor,
 ): InlineClassTemplateTypeEntry => {
   const ttype = instance.getType();
-  if (!ttype) {
-    console.log(
-      instance.getSpelling(),
-      instance.getKindSpelling(),
-      instance.getNumberOfTemplateArguments(),
-    );
-  }
   const appliedParameters: TemplateParameter[] = [];
   if (ttype) {
     const ttargc = ttype.getNumberOfTemplateArguments()!;
@@ -318,9 +318,8 @@ export const visitClassTemplateInstance = (
     if (!classTemplateEntry) {
       throw new Error("Unexpected");
     }
-    const found = visitClassTemplate(
+    const found = visitClassTemplateCursor(
       context,
-      classTemplateEntry.nsName,
       instance,
     );
     return {
@@ -336,9 +335,8 @@ export const visitClassTemplateInstance = (
   } else if (
     instance.kind === CXCursorKind.CXCursor_ClassTemplate
   ) {
-    const found = visitClassTemplate(
+    const found = visitClassTemplateCursor(
       context,
-      getNamespacedName(instance),
       instance,
     );
     return {

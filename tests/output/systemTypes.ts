@@ -1,11 +1,5 @@
 export const ptr = (_: unknown) => "pointer" as const;
 
-export const union3 = <const T, const U, const V>(
-  a: T,
-  _b: U,
-  _c: V,
-): T | U | V => a;
-
 export const func = (_?: unknown) => "function" as const;
 
 export const unary_functionT = <const Arg, const Result>(
@@ -46,12 +40,13 @@ export const functionT = <const Signature>(
 ) =>
   ({
     struct: [
+      _Function_baseT, // base class, size 24, align 8
       { struct: [] }, // _M_invoker
     ],
   }) as const;
 
 export const _Manager_typeT = {
-  parameters: ["pointer", "pointer", _Manager_operationT],
+  parameters: [ptr(_Any_dataT), ptr(_Any_dataT), _Manager_operationT],
   result: "bool",
 } as const;
 declare const _Manager_type_: unique symbol;
@@ -62,16 +57,7 @@ export type _Manager_type = NonNullable<Deno.PointerValue> & {
 export const FUNCTION_BASE_SIZE = 24 as const;
 export const _Function_baseT = {
   struct: [
-    {
-      struct: [
-        union3(
-          "pointer",
-          func({ parameters: [], result: "void" }),
-          ptr("member pointer"),
-        ),
-        { struct: [] },
-      ],
-    }, // _M_functor, offset 0, size 16, align 8
+    _Any_dataT, // _M_functor, offset 0, size 16, align 8
     func(_Manager_typeT), // _M_manager, offset 16, size 8, align 8
   ],
 } as const;

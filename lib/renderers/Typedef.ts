@@ -32,6 +32,7 @@ export const renderTypedef = (
   if (!target) {
     throw new Error("Void typedef");
   }
+
   const nameT = `${name}T`;
   const namePointer = `${name}Pointer`;
   const nameBuffer = `${name}Buffer`;
@@ -127,6 +128,64 @@ export type ${name} = ${targetName};
     return;
   }
 
+  if (
+    isInlineTemplateStruct(target)
+  ) {
+    const BUFFER_SIZE = `${constantCase(name)}_SIZE`;
+    importsInClassesFile.set(BUFFER_SIZE, typesFilePath);
+    const nameBuffer = `${name}Buffer`;
+    const classesEntry = createRenderDataEntry(
+      [nameBuffer],
+      [],
+      `export class ${nameBuffer} extends Uint8Array {
+  constructor(arg?: ArrayBufferLike | number) {
+    if (typeof arg === "undefined") {
+      super(${BUFFER_SIZE})
+      return;
+    } else if (typeof arg === "number") {
+      if (!Number.isFinite(arg) || arg < ${BUFFER_SIZE}) {
+        throw new Error(
+          "Invalid construction of ${nameBuffer}: Size is not finite or is too small",
+        );
+      }
+      super(arg);
+      return;
+    }
+    if (arg.byteLength < ${BUFFER_SIZE}) {
+      throw new Error(
+        "Invalid construction of ${nameBuffer}: Buffer size is too small",
+      );
+    }
+    super(arg);
+  }
+}
+`,
+    );
+    entriesInClassesFile.push(
+      classesEntry,
+    );
+    const asConst = isInlineTemplateStruct(target) ? "" : " as const";
+    const NAME_SIZE = `${constantCase(name)}_SIZE`;
+    const typesEntry = createRenderDataEntry(
+      [NAME_SIZE, nameT, namePointer],
+      [...dependencies],
+      `export const ${NAME_SIZE} = ${
+        entry.cursor.getType()!.getSizeOf()
+      } as const;
+export const ${nameT} = ${
+        renderTypeAsFfi(
+          dependencies,
+          importsInTypesFile,
+          target,
+        )
+      }${asConst};
+declare const ${name}: unique symbol;
+export type ${namePointer} = NonNullable<Deno.PointerValue> & { [${name}]: unknown };
+`,
+    );
+    entriesInTypesFile.push(typesEntry);
+    return;
+  }
   if (
     isStructLike(target) && name && "file" in target
   ) {

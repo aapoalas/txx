@@ -64,6 +64,9 @@ export const renderFile = (
       case "typedef":
         renderTypedef(memory, entry);
         break;
+      case "union":
+        renderUnion(memory, entry);
+        break;
     }
   }
 

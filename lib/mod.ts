@@ -33,6 +33,7 @@ import {
 } from "./types.d.ts";
 import {
   FFI,
+  getCursorFileLocation,
   sortRenderDataEntries,
   SYSTEM_BINDINGS,
   SYSTEM_CLASSES,
@@ -238,7 +239,7 @@ const gatherEntries = (context: Context, parentCursor: CXCursor) =>
          */
         break;
       case CXCursorKind.CXCursor_UnionDecl:
-        // TODO: Support unions somehow
+        context.addUnion(cursor);
         break;
       case CXCursorKind.CXCursor_VarDecl:
         context.addVar(cursor);

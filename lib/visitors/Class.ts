@@ -5,16 +5,45 @@ import {
   CXCursorKind,
 } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
 import { Context } from "../Context.ts";
-import { ClassContent, ClassEntry, TypeEntry } from "../types.d.ts";
+import {
+  ClassContent,
+  ClassEntry,
+  InlineClassTemplateTypeEntry,
+  Parameter,
+  TemplateParameter,
+  TypeEntry,
+} from "../types.d.ts";
 import { visitClassTemplateInstance } from "./ClassTemplate.ts";
 import { visitFunction } from "./Function.ts";
 import { visitType } from "./Type.ts";
 import { visitTypedef } from "./Typedef.ts";
-import { getCursorFileLocation } from "../utils.ts";
+import {
+  getCursorFileLocation,
+  getFileNameFromCursor,
+  getNamespacedName,
+} from "../utils.ts";
+import { CXTypeKind } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
 
 const PLAIN_METHOD_NAME_REGEX = /^[\w_]+$/i;
 
-export const visitClass = (
+export const visitClassCursor = (
+  context: Context,
+  /**
+   * Must have kind ClassDecl or StructDecl
+   */
+  cursor: CXCursor,
+  importEntry?: ClassContent,
+): ClassEntry => {
+  const classEntry = context.findClassByCursor(cursor);
+
+  if (!classEntry) {
+    throw new Error(`Could not find class entry for '${cursor.getSpelling()}'`);
+  }
+
+  return visitClassEntry(context, classEntry, importEntry);
+};
+
+export const visitClassEntry = (
   context: Context,
   classEntry: ClassEntry,
   importEntry?: ClassContent,
@@ -270,6 +299,9 @@ const visitMethod = (
 
 export const visitBaseClass = (
   context: Context,
+  /**
+   * Must have kind CXXBaseSpecifier
+   */
   cursor: CXCursor,
   importEntry?: ClassContent,
 ) => {
@@ -292,31 +324,66 @@ export const visitBaseClass = (
     }
     : undefined;
   const isVirtualBase = cursor.isVirtualBase();
-  const classEntry = context.findClassByCursor(definition);
-  if (classEntry) {
+  const baseClass = context.visitClassLikeByCursor(definition, importEntry);
+  if (baseClass.kind === "class<T>") {
+    const parameters: (Parameter | TemplateParameter)[] = [];
+    const type = cursor.getType()!;
+    const targc = type.getNumberOfTemplateArguments();
+    for (let i = 0; i < targc; i++) {
+      const targType = type.getTemplateArgumentAsType(i)!;
+      if (targType.kind === CXTypeKind.CXType_Unexposed) {
+        // Template parameter
+        const targName = targType.getSpelling();
+        parameters.push(
+          {
+            kind: "<T>",
+            name: targName.replace("...", ""),
+            isSpread: targName.includes("..."),
+          } satisfies TemplateParameter,
+        );
+      }
+    }
     return {
-      baseClass: visitClass(context, classEntry, importEntry),
+      baseClass: {
+        cursor: definition,
+        file: getFileNameFromCursor(definition),
+        kind: "inline class<T>",
+        parameters,
+        template: baseClass,
+        type,
+        name: definition.getSpelling(),
+        nsName: getNamespacedName(definition),
+      } satisfies InlineClassTemplateTypeEntry,
       isVirtualBase,
     };
+  } else {
+    return { baseClass, isVirtualBase };
   }
-  const classTemplateEntry = context.findClassTemplateByCursor(definition);
-  if (classTemplateEntry) {
-    return {
-      baseClass: visitClassTemplateInstance(
-        context,
-        definition,
-      ),
-      isVirtualBase,
-    };
-  }
-  const typedefEntry = context.findTypedefByCursor(definition);
-  if (typedefEntry) {
-    return {
-      baseClass: visitTypedef(context, typedefEntry.name),
-      isVirtualBase,
-    };
-  }
-  throw new Error(
-    `Could not find class with cursor '${definition.getSpelling()}'`,
-  );
+  // const classEntry = context.findClassByCursor(definition);
+  // if (classEntry) {
+  //   return {
+  //     baseClass: visitClassEntry(context, classEntry, importEntry),
+  //     isVirtualBase,
+  //   };
+  // }
+  // const classTemplateEntry = context.findClassTemplateByCursor(definition);
+  // if (classTemplateEntry) {
+  //   return {
+  //     baseClass: visitClassTemplateInstance(
+  //       context,
+  //       definition,
+  //     ),
+  //     isVirtualBase,
+  //   };
+  // }
+  // const typedefEntry = context.findTypedefByCursor(definition);
+  // if (typedefEntry) {
+  //   return {
+  //     baseClass: visitTypedef(context, typedefEntry.name),
+  //     isVirtualBase,
+  //   };
+  // }
+  // throw new Error(
+  //   `Could not find class with cursor '${definition.getSpelling()}'`,
+  // );
 };

@@ -1,6 +1,7 @@
 import { ImportMap, TypedefEntry, TypeEntry } from "../types.d.ts";
 import {
   classesFile,
+  getCursorFileLocation,
   getSizeOfType,
   isFunction,
   isPointer,
@@ -199,6 +200,13 @@ export const renderTypeAsFfi = (
     importMap.set(`${type.name}T`, typesFile(type.file));
     importMap.set("ptr", SYSTEM_TYPES);
     return `${type.name}T`;
+  } else if (type.kind === "union") {
+    const name = type.name;
+    const nameT = `${name}T`;
+    importMap.set(nameT, typesFile(type.file));
+    dependencies.add(nameT);
+
+    return nameT;
   } else {
     throw new Error(
       // @ts-expect-error kind and name will exist in any added TypeEntry types

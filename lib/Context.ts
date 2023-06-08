@@ -1,4 +1,5 @@
 import {
+  CXChildVisitResult,
   CXCursor,
   CXType,
 } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
@@ -12,6 +13,7 @@ import {
   FunctionEntry,
   TypedefEntry,
   TypeEntry,
+  UnionEntry,
   UseableEntry,
   VarEntry,
 } from "./types.d.ts";
@@ -28,8 +30,11 @@ import {
   isTypedef,
 } from "./utils.ts";
 import { visitFunction } from "./visitors/Function.ts";
-import { visitClass } from "./visitors/Class.ts";
-import { visitClassTemplate } from "./visitors/ClassTemplate.ts";
+import { visitClassEntry } from "./visitors/Class.ts";
+import {
+  visitClassTemplateCursor,
+  visitClassTemplateEntry,
+} from "./visitors/ClassTemplate.ts";
 import { handleImports } from "./renderer.ts";
 import { visitTypedef } from "./visitors/Typedef.ts";
 
@@ -43,6 +48,7 @@ export class Context {
   #nsStack: string[] = [];
   #typedefs: TypedefEntry[] = [];
   #typedefTemplates = [];
+  #unions: UnionEntry[] = [];
   #vars: VarEntry[] = [];
   #useableEntries: UseableEntry[] = [];
 
@@ -244,15 +250,43 @@ export class Context {
     this.#useableEntries.push(entry);
   }
 
+  addUnion(cursor: CXCursor): void {
+    if (!cursor.isDefinition()) {
+      return;
+    }
+    const name = cursor.getSpelling();
+    if (!name) {
+      return;
+    }
+
+    const nameTemplatePart = getCursorNameTemplatePart(cursor);
+
+    const nsName = this.#nsStack.length
+      ? `${this.#nsStack.join("::")}${SEP}${name}${nameTemplatePart}`
+      : `${name}${nameTemplatePart}`;
+
+    const entry = {
+      cursor,
+      file: getFileNameFromCursor(cursor),
+      kind: "union",
+      name,
+      nsName,
+      fields: [],
+      used: false,
+    } satisfies UnionEntry;
+    this.#unions.push(entry);
+    this.#useableEntries.push(entry);
+  }
+
   visitClass(importEntry: ClassContent): void {
     const classEntry = this.findClassByName(importEntry.name);
     if (classEntry) {
-      visitClass(this, classEntry, importEntry);
+      visitClassEntry(this, classEntry, importEntry);
       return;
     }
     const classTemplateEntry = this.findClassTemplateByName(importEntry.name);
     if (classTemplateEntry) {
-      visitClassTemplate(this, classTemplateEntry.name);
+      visitClassTemplateEntry(this, classTemplateEntry);
       return;
     }
     const typedefEntry = this.findTypedefByName(importEntry.name);
@@ -269,19 +303,35 @@ export class Context {
   ): ClassEntry | ClassTemplateEntry | TypedefEntry {
     const classEntry = this.findClassByCursor(cursor);
     if (classEntry) {
-      return visitClass(this, classEntry, importEntry);
+      return visitClassEntry(this, classEntry, importEntry);
     }
     const classTemplateEntry = this.findClassTemplateByCursor(cursor);
     if (classTemplateEntry) {
-      return visitClassTemplate(this, classTemplateEntry.name);
+      return visitClassTemplateEntry(this, classTemplateEntry);
     }
     const typedefEntry = this.findTypedefByCursor(cursor);
     if (typedefEntry) {
       return visitTypedef(this, typedefEntry.name);
     }
-    throw new Error(
-      `Could not find class with cursor '${cursor.getSpelling()}'`,
+    const hasChildren = cursor.visitChildren(() =>
+      CXChildVisitResult.CXChildVisit_Break
     );
+    if (hasChildren) {
+      throw new Error(
+        `Unexpectedly found an unregistered class entry with children '${
+          getNamespacedName(cursor)
+        }'`,
+      );
+    }
+    const specialized = cursor.getSpecializedTemplate();
+    if (!specialized || specialized.equals(cursor)) {
+      throw new Error(
+        `Unexpectedly found an unregistered class that did not specialize a template '${
+          getNamespacedName(cursor)
+        }'`,
+      );
+    }
+    return this.visitClassLikeByCursor(specialized, importEntry);
   }
 
   visitFunction(importEntry: FunctionContent): void {
@@ -373,6 +423,10 @@ export class Context {
         type.isConstQualifiedType() ? name.substring(6) : name,
       );
     }
+  }
+
+  findUnionByCursor(cursor: CXCursor) {
+    return this.#unions.find((entry) => entry.cursor.equals(cursor));
   }
 
   findFunctionByCursor(cursor: CXCursor) {

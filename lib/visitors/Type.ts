@@ -19,15 +19,16 @@ import {
   TypeEntry,
 } from "../types.d.ts";
 import {
+  getCursorFileLocation,
   getFileNameFromCursor,
   getNamespacedName,
   getPlainTypeInfo,
 } from "../utils.ts";
-import { visitBaseClass } from "./Class.ts";
-import { visitClassTemplate } from "./ClassTemplate.ts";
+import { visitBaseClass, visitClassEntry } from "./Class.ts";
+import { visitClassTemplateCursor } from "./ClassTemplate.ts";
 import { visitEnum } from "./Enum.ts";
 import { visitTypedef } from "./Typedef.ts";
-import { CXVisitorResult } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
+import { visitUnionCursor } from "./Union.ts";
 
 export const visitType = (context: Context, type: CXType): null | TypeEntry => {
   const kind = type.kind;
@@ -123,7 +124,7 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
     }
     return "buffer";
   } else if (kind === CXTypeKind.CXType_Elaborated) {
-    return visitType(context, type.getNamedType()!);
+    return visitElaboratedType(context, type);
   } else if (
     kind === CXTypeKind.CXType_Pointer ||
     kind === CXTypeKind.CXType_LValueReference ||
@@ -177,12 +178,7 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
     }
     return getPlainTypeInfo(kind, type);
   } else if (kind === CXTypeKind.CXType_Record) {
-    const isStruct = type.getCanonicalType().kind === CXTypeKind.CXType_Record;
-    if (isStruct) {
-      return visitRecordType(context, type);
-    } else {
-      throw new Error("Non-struct Record?");
-    }
+    return visitRecordType(context, type);
   } else if (kind === CXTypeKind.CXType_IncompleteArray) {
     throw new Error("IncompleteArray");
   } else if (kind === CXTypeKind.CXType_ConstantArray) {
@@ -285,8 +281,10 @@ export const createInlineTypeEntry = (
   if (templateCursor === null) {
     throw new Error("Could not find specialized template declaration cursor");
   }
-  const templateName = getNamespacedName(templateCursor);
-  const template = visitClassTemplate(context, templateName, templateCursor);
+  const template = visitClassTemplateCursor(
+    context,
+    templateCursor,
+  );
   const targc = type.getNumberOfTemplateArguments();
   const parameters: Parameter[] = [];
   for (let i = 0; i < targc; i++) {
@@ -320,9 +318,11 @@ export const createInlineTypeEntry = (
 const visitRecordType = (
   context: Context,
   type: CXType,
-): InlineClassTypeEntry => {
+) => {
+  const size = type.getSizeOf();
+  const targc = type.getNumberOfTemplateArguments();
   if (
-    type.getSizeOf() === -2 && type.getNumberOfTemplateArguments() === -1
+    size === -2 && targc === -1
   ) {
     // This class or struct is only forward-declared in our headers:
     // This is usually not really an issue and we shouldn't care about it.
@@ -334,43 +334,111 @@ const visitRecordType = (
       fields: [],
       type,
       kind: "inline class",
-    };
+    } satisfies InlineClassTypeEntry;
   }
 
-  const fields: ClassField[] = [];
-  type.visitFields((cursor) => {
-    const fieldType = cursor.getType();
-    if (!fieldType) {
-      throw new Error("Failed to get field type");
-    }
-    const found = context.findTypedefByType(fieldType);
-    let type: null | TypeEntry;
-    if (found) {
-      type = visitType(context, fieldType);
-    } else {
-      type = createInlineTypeEntry(context, fieldType);
-    }
-    if (!type) {
-      throw new Error("Failed to visit field type");
-    }
-    fields.push({
-      cursor,
-      name: cursor.getSpelling(),
-      type,
-    });
-    return CXVisitorResult.CXVisit_Continue;
-  });
-
   const declaration = type.getTypeDeclaration();
+
+  if (!declaration) {
+    throw new Error(`No type declaration ${type.getSpelling()}`);
+  }
+
+  if (targc === 0) {
+    throw new Error("ASD");
+  }
+
+  const parameters: Parameter[] = [];
+  for (let i = 0; i < targc; i++) {
+    const targType = visitType(context, type.getTemplateArgumentAsType(i)!);
+    if (targType === null) {
+      throw new Error("ASD");
+    }
+    parameters.push({
+      comment: null,
+      kind: "parameter",
+      name: `targ_${i}`,
+      type: targType,
+    });
+  }
+
+  if (
+    declaration.kind === CXCursorKind.CXCursor_ClassDecl ||
+    declaration.kind === CXCursorKind.CXCursor_StructDecl
+  ) {
+    const result = context.visitClassLikeByCursor(declaration);
+    if (result.kind !== "class<T>") {
+      throw new Error("Unexpected, lets deal with this later");
+    }
+    return {
+      cursor: declaration,
+      file: getFileNameFromCursor(declaration),
+      kind: "inline class<T>",
+      parameters,
+      template: result,
+      type,
+      name: declaration.getSpelling(),
+      nsName: getNamespacedName(declaration),
+    } satisfies InlineClassTemplateTypeEntry;
+  } else if (declaration.kind === CXCursorKind.CXCursor_TypedefDecl) {
+    throw new Error(`Unexpected TypedefDecl '${type.getSpelling()}'`);
+    // const typedefEntry = context.findTypedefByCursor(declaration);
+  } else if (
+    declaration.kind === CXCursorKind.CXCursor_ClassTemplate ||
+    declaration.kind ===
+      CXCursorKind.CXCursor_ClassTemplatePartialSpecialization
+  ) {
+    return visitClassTemplateCursor(context, declaration);
+  } else if (declaration.kind === CXCursorKind.CXCursor_UnionDecl) {
+    return visitUnionCursor(context, declaration);
+  }
+
+  throw new Error(declaration.getKindSpelling());
   return {
-    base: declaration && declaration.getSpecializedTemplate()
+    base: declaration.getSpecializedTemplate()
       ? visitBaseClass(
         context,
         declaration.getSpecializedTemplate()!,
       ).baseClass
       : null,
-    fields,
+    fields: [],
     kind: "inline class",
     type,
-  };
+  } satisfies InlineClassTypeEntry;
+};
+
+const visitElaboratedType = (
+  context: Context,
+  /**
+   * Must by of kind Elaborated
+   */
+  type: CXType,
+) => {
+  const elaborated = type.getNamedType();
+
+  if (!elaborated) {
+    throw new Error(
+      `Unexpectedly could not get named type of elaborated type '${type.getSpelling()}'`,
+    );
+  }
+
+  if (elaborated.kind !== CXTypeKind.CXType_Unexposed) {
+    // Elaborated type points to something we can analyze normally, continue with that.
+    return visitType(context, elaborated);
+  }
+
+  const canonical = elaborated.getCanonicalType();
+
+  if (canonical.kind !== CXTypeKind.CXType_Unexposed) {
+    return visitType(context, canonical);
+  }
+
+  // Elaborated type points to an unexposed type kind: It's at least possible that this is a template
+  // instance of some kind.
+  const ttargc = elaborated.getNumberOfTemplateArguments();
+
+  if (ttargc < 0) {
+    throw new Error("I have no idea what to do with this type");
+  }
+
+  throw new Error("ASD");
 };

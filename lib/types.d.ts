@@ -148,7 +148,7 @@ export interface ClassTemplateMethod {
 export interface TemplateParameter {
   name: string;
   kind: "<T>";
-  isSpread?: boolean;
+  isSpread: boolean;
 }
 
 export interface Parameter {
@@ -243,7 +243,8 @@ export type TypeEntry =
   | InlineUnionTypeEntry
   | MemberPointerTypeEntry
   | PointerTypeEntry
-  | TypedefEntry;
+  | TypedefEntry
+  | UnionEntry;
 
 export interface EnumEntry extends BaseEntry {
   kind: "enum";
@@ -268,12 +269,18 @@ export interface VarEntry extends BaseEntry {
   type: null | TypeEntry;
 }
 
+export interface UnionEntry extends BaseEntry {
+  kind: "union";
+  fields: CXCursor[];
+}
+
 export type UseableEntry =
   | ClassEntry
   | ClassTemplateEntry
   | EnumEntry
   | FunctionEntry
   | TypedefEntry
+  | UnionEntry
   | VarEntry;
 
 export type ImportMap = Map<
