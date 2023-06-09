@@ -20,6 +20,7 @@ import type {
   InlineClassTemplateTypeEntry,
   InlineClassTypeEntry,
   InlineUnionTypeEntry,
+  MemberPointerTypeEntry,
   PlainTypeString,
   PointerTypeEntry,
   RenderDataEntry,
@@ -437,10 +438,11 @@ export const getSizeOfType = (entry: null | TypeEntry): number => {
     case "function":
     case "pointer":
     case "member pointer":
-      return 8;
+      return (entry as MemberPointerTypeEntry).type.getSizeOf();
     case "class":
     case "class<T>":
     case "enum":
+    case "union":
       return entry.cursor.getType()!.getSizeOf();
     case "[N]":
     case "inline class":
@@ -452,5 +454,35 @@ export const getSizeOfType = (entry: null | TypeEntry): number => {
       );
     case "typedef":
       return getSizeOfType(entry.target);
+    default:
+      throw new Error("Unimplemented");
   }
+};
+
+export const createSizedStruct = (
+  type: CXType,
+): { struct: ("u8" | "u16" | "u32" | "u64")[] } => {
+  const size = type.getSizeOf();
+  const align = type.getAlignOf();
+  if (align !== 1 && align !== 2 && align !== 4 && align !== 8) {
+    throw new Error(`Unexpected union alignment '${align}'`);
+  }
+  const unitString = `u${align * 8}` as "u8" | "u16" | "u32" | "u64";
+  if (size === align) {
+    return { struct: [unitString] };
+  }
+
+  const count = Math.floor(size / align);
+  const remainder = size % align;
+
+  if (remainder === 0) {
+    return { struct: new Array(count).fill(unitString) };
+  } else if (!Number.isInteger(remainder)) {
+    throw new Error(`Unexpected union alignment remainder '${remainder}'`);
+  }
+  return {
+    struct: new Array(count).fill(unitString).concat(
+      new Array(remainder).fill("u8"),
+    ),
+  };
 };

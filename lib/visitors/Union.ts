@@ -19,8 +19,11 @@ export const visitUnionCursor = (context: Context, cursor: CXCursor) => {
 
   entry.cursor.visitChildren((child) => {
     if (child.kind === CXCursorKind.CXCursor_FieldDecl) {
-      visitType(context, child.getType()!);
-      entry.fields.push(child);
+      const typeEntry = visitType(context, child.getType()!);
+      if (!typeEntry) {
+        throw new Error("Failed to visit union field");
+      }
+      entry.fields.push(typeEntry);
     }
     return CXChildVisitResult.CXChildVisit_Continue;
   });

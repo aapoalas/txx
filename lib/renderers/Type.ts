@@ -1,7 +1,7 @@
 import { ImportMap, TypedefEntry, TypeEntry } from "../types.d.ts";
 import {
   classesFile,
-  getCursorFileLocation,
+  createSizedStruct,
   getSizeOfType,
   isFunction,
   isPointer,
@@ -181,9 +181,9 @@ export const renderTypeAsFfi = (
   } else if (type.kind === "inline union") {
     const uniqueSortedFields = [
       ...new Set(
-        type.fields.sort((a, b) => {
-          return getSizeOfType(b.type) - getSizeOfType(a.type);
-        }).map((field) => renderTypeAsFfi(dependencies, importMap, field.type)),
+        type.fields.sort((a, b) =>
+          getSizeOfType(b.type) - getSizeOfType(a.type)
+        ).map((field) => renderTypeAsFfi(dependencies, importMap, field.type)),
       ),
     ];
     const count = uniqueSortedFields.length;
@@ -194,8 +194,7 @@ export const renderTypeAsFfi = (
       )
     })`;
   } else if (type.kind === "member pointer") {
-    importMap.set("ptr", SYSTEM_TYPES);
-    return `ptr("member pointer")`;
+    return JSON.stringify(createSizedStruct(type.type));
   } else if (type.kind === "class<T>") {
     importMap.set(`${type.name}T`, typesFile(type.file));
     importMap.set("ptr", SYSTEM_TYPES);
@@ -320,6 +319,8 @@ export const renderTypeAsTS = (
     return "number";
   } else if (type.kind === "class<T>") {
     throw new Error("Unexpected class template entry");
+  } else if (type.kind === "union") {
+    throw new Error("Unexpected union entry");
   } else {
     throw new Error(
       // @ts-expect-error No type kind should exist here

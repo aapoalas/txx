@@ -12,19 +12,16 @@ import {
   FunctionTypeEntry,
   InlineClassTemplateTypeEntry,
   InlineClassTypeEntry,
-  InlineUnionTypeEntry,
   Parameter,
   PointerTypeEntry,
   TemplateParameter,
   TypeEntry,
 } from "../types.d.ts";
 import {
-  getCursorFileLocation,
   getFileNameFromCursor,
   getNamespacedName,
   getPlainTypeInfo,
 } from "../utils.ts";
-import { visitBaseClass, visitClassEntry } from "./Class.ts";
 import { visitClassTemplateCursor } from "./ClassTemplate.ts";
 import { visitEnum } from "./Enum.ts";
 import { visitTypedef } from "./Typedef.ts";
@@ -393,17 +390,17 @@ const visitRecordType = (
   }
 
   throw new Error(declaration.getKindSpelling());
-  return {
-    base: declaration.getSpecializedTemplate()
-      ? visitBaseClass(
-        context,
-        declaration.getSpecializedTemplate()!,
-      ).baseClass
-      : null,
-    fields: [],
-    kind: "inline class",
-    type,
-  } satisfies InlineClassTypeEntry;
+  // return {
+  //   base: declaration.getSpecializedTemplate()
+  //     ? visitBaseClass(
+  //       context,
+  //       declaration.getSpecializedTemplate()!,
+  //     ).baseClass
+  //     : null,
+  //   fields: [],
+  //   kind: "inline class",
+  //   type,
+  // } satisfies InlineClassTypeEntry;
 };
 
 const visitElaboratedType = (

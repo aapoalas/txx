@@ -1,3 +1,11 @@
+export const union3 = <const T, const U, const V>(
+  a: T,
+  _b: U,
+  _c: V,
+): T | U | V => a;
+
+export const union2 = <const T, const U>(a: T, _b: U): T | U => a;
+
 export const ptr = (_: unknown) => "pointer" as const;
 
 export const func = (_?: unknown) => "function" as const;
@@ -27,6 +35,34 @@ export const _Maybe_unary_or_binary_functionT = <const Res, const ArgTypes>(
     struct: [],
   }) as const;
 
+export const _Nocopy_typesT = union3(
+  { "struct": ["u64", "u64"] },
+  "pointer",
+  func({ parameters: [], result: "void" }),
+);
+export const _Any_dataT = union2(
+  _Nocopy_typesT,
+  {
+    struct: [
+      "i8",
+      "i8",
+      "i8",
+      "i8",
+      "i8",
+      "i8",
+      "i8",
+      "i8",
+      "i8",
+      "i8",
+      "i8",
+      "i8",
+      "i8",
+      "i8",
+      "i8",
+      "i8",
+    ],
+  },
+);
 export const _Manager_operationT = "u32";
 export const enum _Manager_operation {
   __get_type_info,

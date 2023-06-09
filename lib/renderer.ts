@@ -3,6 +3,7 @@ import { renderClassTemplate } from "./renderers/ClassTemplate.ts";
 import { renderEnum } from "./renderers/Enum.ts";
 import { renderFunction } from "./renderers/Function.ts";
 import { renderTypedef } from "./renderers/Typedef.ts";
+import { renderUnion } from "./renderers/Union.ts";
 import {
   AbsoluteFilePath,
   ImportMap,

@@ -33,7 +33,6 @@ import {
 } from "./types.d.ts";
 import {
   FFI,
-  getCursorFileLocation,
   sortRenderDataEntries,
   SYSTEM_BINDINGS,
   SYSTEM_CLASSES,

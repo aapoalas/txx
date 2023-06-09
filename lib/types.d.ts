@@ -271,7 +271,7 @@ export interface VarEntry extends BaseEntry {
 
 export interface UnionEntry extends BaseEntry {
   kind: "union";
-  fields: CXCursor[];
+  fields: TypeEntry[];
 }
 
 export type UseableEntry =
