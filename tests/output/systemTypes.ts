@@ -10,31 +10,6 @@ export const ptr = (_: unknown) => "pointer" as const;
 
 export const func = (_?: unknown) => "function" as const;
 
-export const unary_functionT = <const Arg, const Result>(
-  _Arg: Arg,
-  _Result: Result,
-) =>
-  ({
-    struct: [],
-  }) as const;
-
-export const binary_functionT = <const Arg1, const Arg2, const Result>(
-  _Arg1: Arg1,
-  _Arg2: Arg2,
-  _Result: Result,
-) =>
-  ({
-    struct: [],
-  }) as const;
-
-export const _Maybe_unary_or_binary_functionT = <const Res, const ArgTypes>(
-  _Res: Res,
-  _ArgTypes: ArgTypes,
-) =>
-  ({
-    struct: [],
-  }) as const;
-
 export const _Nocopy_typesT = union3(
   { "struct": ["u64", "u64"] },
   "pointer",
@@ -73,13 +48,20 @@ export const enum _Manager_operation {
 
 export const functionT = <const Signature>(
   _Signature: Signature,
-) =>
-  ({
-    struct: [
-      _Function_baseT, // base class, size 24, align 8
-      { struct: [] }, // _M_invoker
-    ],
-  }) as const;
+) => {
+  if (isProperType({ parameters: ["buffer"], result: "buffer" })) {
+    return {
+      struct: [
+        _Function_baseT, // base class, size 24, align 8
+        { struct: [] }, // _M_invoker
+      ],
+    };
+  } else {
+    throw new Error(
+      "Failed to build template class: No specialization matched",
+    );
+  }
+};
 
 export const _Manager_typeT = {
   parameters: [ptr(_Any_dataT), ptr(_Any_dataT), _Manager_operationT],

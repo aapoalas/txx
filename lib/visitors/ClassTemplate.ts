@@ -15,6 +15,7 @@ import {
 import { getNamespacedName } from "../utils.ts";
 import { visitBaseClass } from "./Class.ts";
 import { createInlineTypeEntry, visitType } from "./Type.ts";
+import { CXTypeKind } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
 
 export const visitClassTemplateCursor = (
   context: Context,
@@ -51,64 +52,37 @@ export const visitClassTemplateEntry = (
     partialSpecialization = classTemplateEntry.partialSpecializations[0];
   }
 
-  if (classTemplateEntry.partialSpecializations.length > 1) {
-    for (const spec of classTemplateEntry.partialSpecializations) {
-      if (spec.parameters.length || spec.bases.length || spec.fields.length) {
-        // Already populated
-        continue;
-      }
+  const doVisit = !classTemplateEntry.used;
 
-      spec.cursor.visitChildren((gc) => {
-        if (gc.kind === CXCursorKind.CXCursor_TemplateTypeParameter) {
-          spec.parameters.push({
-            kind: "<T>",
-            name: gc.getSpelling(),
-            isSpread: gc.getPrettyPrinted().includes("..."),
-          });
-        } else if (gc.kind === CXCursorKind.CXCursor_CXXBaseSpecifier) {
-          const { baseClass, isVirtualBase } = visitBaseClass(context, gc);
-          if (isVirtualBase) {
-            spec.virtualBases.push(baseClass);
-          } else {
-            spec.bases.push(baseClass);
-          }
-        }
-        return 1;
-      });
-    }
+  if (partialSpecialization) {
+    partialSpecialization.used = true;
   }
 
-  const visitBasesAndFields = !classTemplateEntry.used;
-  const visitPartialSpecializationFieldsAndBases = partialSpecialization
-    ? !partialSpecialization.used
-    : false;
-
   if (
-    !visitBasesAndFields && !visitPartialSpecializationFieldsAndBases
+    !doVisit
   ) {
-    // We're not going to visit fields, add constructors, destructors
-    // or methods. Thus we do not need to visit children at all.
     return classTemplateEntry;
   }
 
   classTemplateEntry.used = true;
 
+  const defaultSpecialization = classTemplateEntry.defaultSpecialization;
+
   classTemplateEntry.cursor.visitChildren(
     (gc: CXCursor): CXChildVisitResult => {
       if (
-        gc.kind === CXCursorKind.CXCursor_CXXBaseSpecifier &&
-        visitBasesAndFields
+        gc.kind === CXCursorKind.CXCursor_CXXBaseSpecifier
       ) {
         try {
           const { baseClass, isVirtualBase } = visitBaseClass(context, gc);
           if (isVirtualBase) {
-            classTemplateEntry.virtualBases.push(baseClass);
+            defaultSpecialization.virtualBases.push(baseClass);
           } else {
-            classTemplateEntry.bases.push(baseClass);
+            defaultSpecialization.bases.push(baseClass);
           }
         } catch (err) {
           const baseError = new Error(
-            `Failed to visit base class '${gc.getSpelling()}' of class template '${classTemplateEntry.name}'`,
+            `Failed to visit base class '${gc.getSpelling()}' of class template '${classTemplateEntry.name}' default specialization`,
           );
           baseError.cause = err;
           throw baseError;
@@ -144,12 +118,12 @@ export const visitClassTemplateEntry = (
         //   throw newError;
         // }
       } else if (
-        gc.kind === CXCursorKind.CXCursor_FieldDecl && visitBasesAndFields
+        gc.kind === CXCursorKind.CXCursor_FieldDecl
       ) {
         const type = gc.getType();
         if (!type) {
           throw new Error(
-            `Could not get type for class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
+            `Could not get type for class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}' defaultSpecialization`,
           );
         }
         let field: TypeEntry | null;
@@ -165,11 +139,98 @@ export const visitClassTemplateEntry = (
           //     field = "buffer";
           //   } else {
           const newError = new Error(
-            `Failed to visit class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
+            `Failed to visit class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}' defaultSpecialization`,
           );
           newError.cause = err;
           throw newError;
           //   }
+        }
+        if (field === null) {
+          throw new Error(
+            `Found void class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}' default specialization`,
+          );
+        }
+        if (typeof field === "object" && "used" in field) {
+          field.used = true;
+        }
+        defaultSpecialization.fields.push({
+          cursor: gc,
+          name: gc.getSpelling(),
+          type: field,
+        });
+      } else if (
+        gc.kind === CXCursorKind.CXCursor_TemplateTypeParameter
+      ) {
+        defaultSpecialization.parameters.push({
+          kind: "<T>",
+          name: gc.getSpelling().replace("...", ""),
+          isSpread: gc.getSpelling().includes("..."),
+        });
+      } else if (
+        gc.kind === CXCursorKind.CXCursor_TemplateTemplateParameter
+      ) {
+        throw new Error(
+          `Encountered template template parameter '${gc.getSpelling()} in class template '${classTemplateEntry.nsName}''`,
+        );
+      }
+      return CXChildVisitResult.CXChildVisit_Continue;
+    },
+  );
+
+  // Default specialization and class template itself take the same parameters.
+  classTemplateEntry.parameters.push(...defaultSpecialization.parameters);
+
+  classTemplateEntry.partialSpecializations.forEach((spec) => {
+    spec.cursor.visitChildren((gc) => {
+      if (
+        gc.kind === CXCursorKind.CXCursor_CXXBaseSpecifier
+      ) {
+        try {
+          const { isVirtualBase, baseClass } = visitBaseClass(context, gc);
+          if (isVirtualBase) {
+            spec.virtualBases.push(baseClass);
+          } else {
+            spec.bases.push(baseClass);
+          }
+        } catch (err) {
+          const baseError = new Error(
+            `Failed to visit base class '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
+          );
+          baseError.cause = err;
+          throw baseError;
+        }
+      } else if (
+        gc.kind === CXCursorKind.CXCursor_FieldDecl
+      ) {
+        const type = gc.getType();
+        if (!type) {
+          throw new Error(
+            `Could not get type for class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
+          );
+        }
+        let field: TypeEntry | null;
+        try {
+          const found = context.findTypedefByType(type);
+          if (found) {
+            field = visitType(context, type);
+          } else {
+            field = createInlineTypeEntry(context, type);
+          }
+        } catch (err) {
+          // const access = gc.getCXXAccessSpecifier();
+          // if (
+          //   access === CX_CXXAccessSpecifier.CX_CXXPrivate ||
+          //   access === CX_CXXAccessSpecifier.CX_CXXProtected
+          // ) {
+          //   // Failure to accurately describe a private or protected field is not an issue.
+          //   field = "buffer";
+          // } else {
+          const newError = new Error(
+            `Failed to visit class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
+          );
+          newError.cause = err;
+          throw newError;
+          // }
         }
         if (field === null) {
           throw new Error(
@@ -179,109 +240,40 @@ export const visitClassTemplateEntry = (
         if (typeof field === "object" && "used" in field) {
           field.used = true;
         }
-        classTemplateEntry.fields.push({
+        spec.fields.push({
           cursor: gc,
           name: gc.getSpelling(),
           type: field,
         });
       } else if (
-        gc.kind === CXCursorKind.CXCursor_TemplateTypeParameter &&
-        visitBasesAndFields
+        gc.kind === CXCursorKind.CXCursor_TemplateTypeParameter
       ) {
-        classTemplateEntry.parameters.push({
+        spec.parameters.push({
           kind: "<T>",
-          name: gc.getSpelling().replace("...", ""),
-          isSpread: gc.getSpelling().includes("..."),
+          name: gc.getSpelling(),
+          isSpread: gc.getPrettyPrinted().includes("typename ..."),
         });
+      } else if (
+        gc.kind === CXCursorKind.CXCursor_TemplateTemplateParameter
+      ) {
+        throw new Error(
+          `Encountered template template parameter '${gc.getSpelling()} in class template '${classTemplateEntry.nsName}''`,
+        );
       }
       return CXChildVisitResult.CXChildVisit_Continue;
-    },
-  );
+    });
 
-  if (!partialSpecialization) {
-    return classTemplateEntry;
-  }
-
-  partialSpecialization.used = true;
-
-  partialSpecialization.cursor.visitChildren((gc) => {
-    if (
-      gc.kind === CXCursorKind.CXCursor_CXXBaseSpecifier &&
-      visitPartialSpecializationFieldsAndBases
-    ) {
-      try {
-        const { isVirtualBase, baseClass } = visitBaseClass(context, gc);
-        if (isVirtualBase) {
-          partialSpecialization!.virtualBases.push(baseClass);
-        } else {
-          partialSpecialization!.bases.push(baseClass);
-        }
-      } catch (err) {
-        const baseError = new Error(
-          `Failed to visit base class '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
-        );
-        baseError.cause = err;
-        throw baseError;
-      }
-    } else if (
-      gc.kind === CXCursorKind.CXCursor_FieldDecl &&
-      visitPartialSpecializationFieldsAndBases
-    ) {
-      const type = gc.getType();
-      if (!type) {
-        throw new Error(
-          `Could not get type for class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
-        );
-      }
-      let field: TypeEntry | null;
-      try {
-        const found = context.findTypedefByType(type);
-        if (found) {
-          field = visitType(context, type);
-        } else {
-          field = createInlineTypeEntry(context, type);
-        }
-      } catch (err) {
-        // const access = gc.getCXXAccessSpecifier();
-        // if (
-        //   access === CX_CXXAccessSpecifier.CX_CXXPrivate ||
-        //   access === CX_CXXAccessSpecifier.CX_CXXProtected
-        // ) {
-        //   // Failure to accurately describe a private or protected field is not an issue.
-        //   field = "buffer";
-        // } else {
-        const newError = new Error(
-          `Failed to visit class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
-        );
-        newError.cause = err;
-        throw newError;
-        // }
-      }
-      if (field === null) {
-        throw new Error(
-          `Found void class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
-        );
-      }
-      if (typeof field === "object" && "used" in field) {
-        field.used = true;
-      }
-      partialSpecialization!.fields.push({
-        cursor: gc,
-        name: gc.getSpelling(),
-        type: field,
-      });
-    } else if (
-      gc.kind === CXCursorKind.CXCursor_TemplateTypeParameter &&
-      visitPartialSpecializationFieldsAndBases
-    ) {
-      partialSpecialization!.parameters.push({
-        kind: "<T>",
-        name: gc.getSpelling(),
-        isSpread: gc.getPrettyPrinted().includes("typename ..."),
-      });
+    const specType = spec.cursor.getType()!;
+    const targc = specType.getNumberOfTemplateArguments();
+    for (let i = 0; i < targc; i++) {
+      const targType = visitType(
+        context,
+        specType.getTemplateArgumentAsType(i)!,
+      );
+      spec.application.push(targType!);
     }
-    return CXChildVisitResult.CXChildVisit_Continue;
   });
+
   return classTemplateEntry;
 };
 
@@ -322,6 +314,12 @@ export const visitClassTemplateInstance = (
       context,
       instance,
     );
+    if (ttype === null) {
+      throw new Error(
+        `${classTemplateEntry.nsName} instance had a null type value for ${instance.getSpelling()}
+      `,
+      );
+    }
     return {
       cursor: found.cursor,
       file: found.file,
@@ -339,6 +337,12 @@ export const visitClassTemplateInstance = (
       context,
       instance,
     );
+    if (ttype === null) {
+      throw new Error(
+        `${found.nsName} instance had a null type value for ${instance.getSpelling()}
+      `,
+      );
+    }
     return {
       cursor: found.cursor,
       file: found.file,

@@ -7,7 +7,9 @@ import {
   AbsoluteFilePath,
   ClassContent,
   ClassEntry,
+  ClassField,
   ClassTemplateEntry,
+  ClassTemplatePartialSpecialization,
   EnumEntry,
   FunctionContent,
   FunctionEntry,
@@ -96,21 +98,29 @@ export class Context {
     const nsName = this.#nsStack.length
       ? `${this.#nsStack.join("::")}${SEP}${name}`
       : name;
-    const entry = {
+    const defaultSpecialization: ClassTemplatePartialSpecialization = {
+      application: [],
       bases: [],
       constructors: [],
       cursor,
       destructor: null,
       fields: [],
+      kind: "partial class<T>",
+      methods: [],
+      parameters: [],
+      used: false,
+      virtualBases: [],
+    };
+    const entry = {
+      cursor,
+      defaultSpecialization,
       file: getFileNameFromCursor(cursor),
       kind: "class<T>",
-      methods: [],
       name,
       nsName,
       parameters: [],
-      used: false,
       partialSpecializations: [],
-      virtualBases: [],
+      used: false,
     } satisfies ClassTemplateEntry;
     this.#classTemplates.push(entry);
     this.#useableEntries.push(entry);
@@ -130,10 +140,14 @@ export class Context {
       );
     }
     source.partialSpecializations.push({
+      application: [],
       bases: [],
+      constructors: [],
       cursor,
+      destructor: null,
       fields: [],
       kind: "partial class<T>",
+      methods: [],
       parameters: [],
       used: false,
       virtualBases: [],
@@ -560,7 +574,13 @@ const replaceSelfReferentialFieldValues = (
       visitorCallback(entry.element);
     }
   };
-  source.fields.forEach((field) => {
+  const cb = (field: ClassField) => {
     visitorCallback(field.type);
-  });
+  };
+  if (source.kind === "class") {
+    source.fields.forEach(cb);
+  } else {
+    source.defaultSpecialization.fields.forEach(cb);
+    source.partialSpecializations.forEach((spec) => spec.fields.forEach(cb));
+  }
 };

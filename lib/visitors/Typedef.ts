@@ -20,13 +20,6 @@ export const visitTypedef = (
     if (!referredType) {
       throw new Error(`Could not find referred type for typedef '${name}'`);
     }
-    if (referredType.kind === CXTypeKind.CXType_Elaborated) {
-      console.log(
-        referredType.getKindSpelling(),
-        referredType.getSpelling(),
-        referredType.getNumberOfTemplateArguments(),
-      );
-    }
     const result = visitType(context, referredType);
     found.target = result;
   }

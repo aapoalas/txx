@@ -149,11 +149,8 @@ export const renderTypeAsFfi = (
     const templateT = `${type.template.name}T`;
     importMap.set(templateT, typesFile(type.template.file));
     dependencies.add(templateT);
-    const bases = type.template.bases.map((base) =>
-      renderTypeAsFfi(dependencies, importMap, base)
-    );
     return `${templateT}(${
-      bases.concat(type.parameters.map((param) =>
+      (type.parameters.map((param) =>
         param.kind === "parameter"
           ? renderTypeAsFfi(dependencies, importMap, param.type)
           : param.name

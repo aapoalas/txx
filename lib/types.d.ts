@@ -100,21 +100,20 @@ export type BaseClassEntry =
 
 export interface ClassTemplateEntry extends BaseEntry {
   kind: "class<T>";
-  bases: BaseClassEntry[];
-  constructors: ClassConstructor[];
-  destructor: null | ClassDestructor;
   parameters: TemplateParameter[];
-  fields: ClassField[];
-  methods: ClassMethod[];
+  defaultSpecialization: ClassTemplatePartialSpecialization;
   partialSpecializations: ClassTemplatePartialSpecialization[];
-  virtualBases: BaseClassEntry[];
 }
 
 export interface ClassTemplatePartialSpecialization {
+  application: TypeEntry[];
   kind: "partial class<T>";
+  constructors: ClassConstructor[];
+  destructor: null | ClassDestructor;
   bases: BaseClassEntry[];
   cursor: CXCursor;
   fields: ClassField[];
+  methods: ClassMethod[];
   parameters: TemplateParameter[];
   used: boolean;
   virtualBases: BaseClassEntry[];
