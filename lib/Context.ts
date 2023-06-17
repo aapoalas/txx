@@ -17,10 +17,10 @@ import {
   TypeEntry,
   UnionEntry,
   UseableEntry,
+  VarContent,
   VarEntry,
 } from "./types.d.ts";
 import {
-  getCursorFileLocation,
   getCursorNameTemplatePart,
   getFileNameFromCursor,
   getNamespacedName,
@@ -31,14 +31,11 @@ import {
   isStruct,
   isTypedef,
 } from "./utils.ts";
-import { visitFunction } from "./visitors/Function.ts";
 import { visitClassEntry } from "./visitors/Class.ts";
-import {
-  visitClassTemplateCursor,
-  visitClassTemplateEntry,
-} from "./visitors/ClassTemplate.ts";
-import { handleImports } from "./renderer.ts";
+import { visitClassTemplateEntry } from "./visitors/ClassTemplate.ts";
+import { visitFunction } from "./visitors/Function.ts";
 import { visitTypedef } from "./visitors/Typedef.ts";
+import { visitVar } from "./visitors/Var.ts";
 
 export const SEP = "::";
 
@@ -362,6 +359,20 @@ export class Context {
 
     found.parameters = result.parameters;
     found.result = result.result;
+  }
+
+  visitVar(importEntry: VarContent): void {
+    const found = this.#vars.find((entry) =>
+      entry.name === importEntry.name || entry.nsName === importEntry.name
+    );
+    if (!found) {
+      throw new Error(`Could not find var '${importEntry.name}'`);
+    }
+
+    const _result = visitVar(
+      this,
+      found.cursor,
+    );
   }
 
   pushToNamespaceStack(namespace: string) {

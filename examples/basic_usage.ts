@@ -5,7 +5,7 @@ import { build } from "../lib/mod.ts";
 const LIB_BASE_PATH = "/path/to/sources/";
 
 build({
-  basePath: "/path/to/sources",
+  basePath: LIB_BASE_PATH,
   outputPath: "/path/to/output",
   files: [
     `${LIB_BASE_PATH}some/header.h`,

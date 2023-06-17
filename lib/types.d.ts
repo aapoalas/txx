@@ -18,10 +18,41 @@ export type SystemTypesFileName = "#SYSTEM_T";
 export type BindingsFileName = "#FFI";
 
 export interface ExportConfiguration {
+  /**
+   * Determines the base path against which output files are generated.
+   *
+   * @example
+   * If base path is set to '/path/to/cpp/sources' and a file
+   * '/path/to/cpp/sources/include/main/header.h' is encountered
+   * then in the output folder the generated file will be eg.
+   * 'include/main/header.h.ts'.
+   *
+   * Any needed types from files outside the base path get rolled into
+   * the generic "system" files generated at the root of the output path.
+   */
   basePath: AbsoluteFilePath;
+  /**
+   * Determines the folder into which output files are generated.
+   */
   outputPath: AbsoluteFilePath;
+  /**
+   * Determines which C++ classes and others are considered "entry points"
+   * into the headers. Only these entries and anything they depend on will
+   * be generated in the output files.
+   */
   imports: ImportContent[];
+  /**
+   * Determines which C++ header files are initially included into the build.
+   *
+   * Any inclusions these files do will of course be included into the build.
+   * This list only serves to give a starting point for the build.
+   */
   files: string[];
+  /**
+   * Determines where Clang will search for included headers.
+   *
+   * These get directly passed to Clang as `-I` (include path) parameters.
+   */
   include: string[];
 }
 
@@ -47,7 +78,12 @@ export interface FunctionContent {
   name: string;
 }
 
-export type ImportContent = ClassContent | FunctionContent;
+export interface VarContent {
+  kind: "var";
+  name: string;
+}
+
+export type ImportContent = ClassContent | FunctionContent | VarContent;
 
 export interface BaseEntry {
   cursor: CXCursor;

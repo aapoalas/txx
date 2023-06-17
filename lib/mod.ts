@@ -87,6 +87,8 @@ export const build = (configuration: ExportConfiguration) => {
       context.visitClass(importEntry);
     } else if (importEntry.kind === "function") {
       context.visitFunction(importEntry);
+    } else if (importEntry.kind === "var") {
+      context.visitVar(importEntry);
     }
   }
 
