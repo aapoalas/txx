@@ -91,9 +91,9 @@ your raw class usage will look something like this:
 
 ```ts
 const u32 = 12;
-const classEntry = MyClass.Constructor(u32);
+const classEntry = MyClass.Constructor(u32); // Calls the C++ constructor `lib::MyClass::Constructor(uint32_t)`
 
-classEntry.print(); // Calls the C++ method `lib::myClass::print()`
+classEntry.print(); // Calls the C++ method `lib::MyClass::print()`
 
 classEntry.delete(); // Calls the C++ destructor `lib::MyClass::~MyClass()`
 ```
