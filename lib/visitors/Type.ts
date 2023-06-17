@@ -89,6 +89,9 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
             isSpread: targ.getTypeDeclaration()?.getPrettyPrinted()?.includes(
               "...",
             ) ?? false,
+            isRef: targ.getTypeDeclaration()?.getPrettyPrinted()?.includes(
+              " &",
+            ) ?? false,
           });
           const targType = visitType(context, targ);
           if (!targType) {
@@ -101,6 +104,9 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
               name: targ.getSpelling(),
               isSpread: targ.getTypeDeclaration()?.getPrettyPrinted()?.includes(
                 "...",
+              ) ?? false,
+              isRef: targ.getTypeDeclaration()?.getPrettyPrinted()?.includes(
+                " &",
               ) ?? false,
             });
           } else {

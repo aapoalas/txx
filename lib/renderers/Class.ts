@@ -14,9 +14,11 @@ import { SEP } from "../Context.ts";
 import {
   ClassEntry,
   ClassMethod,
+  EnumEntry,
   Parameter,
   PointerTypeEntry,
   RenderData,
+  TypedefEntry,
   TypeEntry,
 } from "../types.d.ts";
 import {
@@ -614,7 +616,8 @@ const typesAreEqual = (a: null | TypeEntry, b: null | TypeEntry): boolean => {
     return false;
   }
   if (a.kind === "typedef" || a.kind === "enum") {
-    return a.name === b.name && a.nsName === b.nsName;
+    return a.name === b.name &&
+      a.nsName === (b as TypedefEntry | EnumEntry).nsName;
   } else if (a.kind === "class") {
     const other = b as ClassEntry;
     return a.fields.length === other.fields.length &&

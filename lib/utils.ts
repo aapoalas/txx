@@ -171,7 +171,7 @@ export const isReturnedInRegisters = (entry: TypeEntry): boolean => {
     }
     return canonicalType.isPODType();
   } else {
-    if (entry.type.getSizeOf() > 16) {
+    if (!("type" in entry) || entry.type.getSizeOf() > 16) {
       // Too large to be returned in registers: C++ RVO's this.
       return false;
     }
