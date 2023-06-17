@@ -59,13 +59,13 @@ export interface BaseEntry {
 
 export interface ClassEntry extends BaseEntry {
   kind: "class";
-  bases: (ClassEntry | TypedefEntry)[];
+  bases: BaseClassEntry[];
   constructors: ClassConstructor[];
   destructor: null | ClassDestructor;
   fields: ClassField[];
   methods: ClassMethod[];
   size: number;
-  virtualBases: (ClassEntry | TypedefEntry)[];
+  virtualBases: BaseClassEntry[];
 }
 
 export interface ClassConstructor {
@@ -93,14 +93,30 @@ export interface ClassMethod {
   result: null | TypeEntry;
 }
 
+export type BaseClassEntry =
+  | ClassEntry
+  | InlineClassTemplateTypeEntry
+  | TypedefEntry;
+
 export interface ClassTemplateEntry extends BaseEntry {
   kind: "class<T>";
-  bases: ClassEntry[];
+  parameters: TemplateParameter[];
+  defaultSpecialization: ClassTemplatePartialSpecialization;
+  partialSpecializations: ClassTemplatePartialSpecialization[];
+}
+
+export interface ClassTemplatePartialSpecialization {
+  application: TypeEntry[];
+  kind: "partial class<T>";
   constructors: ClassConstructor[];
   destructor: null | ClassDestructor;
-  parameters: TemplateParameter[];
+  bases: BaseClassEntry[];
+  cursor: CXCursor;
   fields: ClassField[];
   methods: ClassMethod[];
+  parameters: TemplateParameter[];
+  used: boolean;
+  virtualBases: BaseClassEntry[];
 }
 
 export interface ClassTemplateConstructor {
@@ -131,6 +147,8 @@ export interface ClassTemplateMethod {
 export interface TemplateParameter {
   name: string;
   kind: "<T>";
+  isSpread: boolean;
+  isRef: boolean;
 }
 
 export interface Parameter {
@@ -157,17 +175,21 @@ export interface FunctionTypeEntry {
 }
 
 export interface InlineClassTypeEntry {
-  name?: never;
-  kind: "inline class";
+  base: null | BaseClassEntry;
   fields: ClassField[];
+  kind: "inline class";
+  name?: never;
   type: CXType;
 }
 
 export interface InlineClassTemplateTypeEntry {
-  name?: never;
+  cursor: CXCursor;
+  file: AbsoluteFilePath;
   kind: "inline class<T>";
-  template: ClassTemplateEntry;
+  name?: string;
+  nsName?: string;
   parameters: (Parameter | TemplateParameter)[];
+  template: ClassTemplateEntry;
   type: CXType;
 }
 
@@ -175,6 +197,12 @@ export interface InlineUnionTypeEntry {
   name?: never;
   kind: "inline union";
   fields: ClassField[];
+  type: CXType;
+}
+
+export interface MemberPointerTypeEntry {
+  name?: never;
+  kind: "member pointer";
   type: CXType;
 }
 
@@ -205,6 +233,7 @@ export type PlainTypeString =
 export type TypeEntry =
   | PlainTypeString
   | ClassEntry
+  | ClassTemplateEntry
   | FunctionEntry
   | EnumEntry
   | ConstantArrayTypeEntry
@@ -212,8 +241,11 @@ export type TypeEntry =
   | InlineClassTypeEntry
   | InlineClassTemplateTypeEntry
   | InlineUnionTypeEntry
+  | MemberPointerTypeEntry
   | PointerTypeEntry
-  | TypedefEntry;
+  | TemplateParameter
+  | TypedefEntry
+  | UnionEntry;
 
 export interface EnumEntry extends BaseEntry {
   kind: "enum";
@@ -238,12 +270,18 @@ export interface VarEntry extends BaseEntry {
   type: null | TypeEntry;
 }
 
+export interface UnionEntry extends BaseEntry {
+  kind: "union";
+  fields: TypeEntry[];
+}
+
 export type UseableEntry =
   | ClassEntry
   | ClassTemplateEntry
   | EnumEntry
   | FunctionEntry
   | TypedefEntry
+  | UnionEntry
   | VarEntry;
 
 export type ImportMap = Map<

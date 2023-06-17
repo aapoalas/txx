@@ -20,6 +20,7 @@ import type {
   InlineClassTemplateTypeEntry,
   InlineClassTypeEntry,
   InlineUnionTypeEntry,
+  MemberPointerTypeEntry,
   PlainTypeString,
   PointerTypeEntry,
   RenderDataEntry,
@@ -238,7 +239,7 @@ export const getNamespacedName = (cursor: CXCursor): string => {
   const namespaceStack: string[] = [];
   let previousParent: null | CXCursor = null;
   while (parent && (!previousParent || !parent.equals(previousParent))) {
-    if (parent.kind === CXCursorKind.CXCursor_TranslationUnit) {
+    if (parent.isTranslationUnit()) {
       break;
     }
     if (
@@ -253,7 +254,7 @@ export const getNamespacedName = (cursor: CXCursor): string => {
     }
     previousParent = parent;
     parent = parent.getSemanticParent();
-    if (!parent || parent.kind === CXCursorKind.CXCursor_TranslationUnit) {
+    if (!parent || parent.isTranslationUnit()) {
       break;
     }
   }
@@ -399,4 +400,89 @@ export const sortRenderDataEntries = (
       i++;
     }
   }
+};
+
+/**
+ * Get size of TypeEntry in bytes
+ */
+export const getSizeOfType = (entry: null | TypeEntry): number => {
+  if (entry === null) {
+    return 1;
+  } else if (typeof entry === "string") {
+    switch (entry) {
+      case "bool":
+      case "u8":
+      case "i8":
+        return 1;
+      case "u16":
+      case "i16":
+        return 2;
+      case "f32":
+      case "u32":
+      case "i32":
+        return 4;
+      case "f64":
+      case "u64":
+      case "i64":
+      case "buffer":
+      case "pointer":
+      case "cstring":
+      case "cstringArray":
+        return 8;
+      default:
+        throw new Error("Unimplemented");
+    }
+  }
+  switch (entry.kind) {
+    case "fn":
+    case "function":
+    case "pointer":
+    case "member pointer":
+      return (entry as MemberPointerTypeEntry).type.getSizeOf();
+    case "class":
+    case "class<T>":
+    case "enum":
+    case "union":
+      return entry.cursor.getType()!.getSizeOf();
+    case "[N]":
+    case "inline class":
+    case "inline class<T>":
+      return entry.type.getSizeOf();
+    case "inline union":
+      return Math.max(
+        ...entry.fields.map((field) => getSizeOfType(field.type)),
+      );
+    case "typedef":
+      return getSizeOfType(entry.target);
+    default:
+      throw new Error("Unimplemented");
+  }
+};
+
+export const createSizedStruct = (
+  type: CXType,
+): { struct: ("u8" | "u16" | "u32" | "u64")[] } => {
+  const size = type.getSizeOf();
+  const align = type.getAlignOf();
+  if (align !== 1 && align !== 2 && align !== 4 && align !== 8) {
+    throw new Error(`Unexpected union alignment '${align}'`);
+  }
+  const unitString = `u${align * 8}` as "u8" | "u16" | "u32" | "u64";
+  if (size === align) {
+    return { struct: [unitString] };
+  }
+
+  const count = Math.floor(size / align);
+  const remainder = size % align;
+
+  if (remainder === 0) {
+    return { struct: new Array(count).fill(unitString) };
+  } else if (!Number.isInteger(remainder)) {
+    throw new Error(`Unexpected union alignment remainder '${remainder}'`);
+  }
+  return {
+    struct: new Array(count).fill(unitString).concat(
+      new Array(remainder).fill("u8"),
+    ),
+  };
 };

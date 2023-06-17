@@ -6,7 +6,10 @@ import {
   CXChildVisitResult,
   CXCursorKind,
 } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
-import { CXCursor } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
+import {
+  CXCursor,
+  CXType,
+} from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
 import { SEP } from "../Context.ts";
 import {
   ClassEntry,
@@ -70,10 +73,17 @@ export const renderClass = ({
     const BaseT = `${base.name}T`;
     const BasePointer = `${base.name}Pointer`;
     inheritedPointers.push(BasePointer);
-    importsInTypesFile.set(BasePointer, typesFile(base.file));
-    importsInTypesFile.set(BaseT, typesFile(base.file));
+    let baseType: CXType;
+    if (base.kind === "inline class<T>") {
+      importsInTypesFile.set(BasePointer, typesFile(base.template.file));
+      importsInTypesFile.set(BaseT, typesFile(base.template.file));
+      baseType = base.template.cursor.getType()!;
+    } else {
+      importsInTypesFile.set(BasePointer, typesFile(base.file));
+      importsInTypesFile.set(BaseT, typesFile(base.file));
+      baseType = base.cursor.getType()!;
+    }
 
-    const baseType = base.cursor.getType()!;
     const size = baseType.getSizeOf();
     const align = baseType.getAlignOf();
     fields.push(
@@ -400,6 +410,7 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
   constructor(arg?: ArrayBufferLike | number) {
     if (typeof arg === "undefined") {
       super(${CLASS_SIZE})
+      return;
     } else if (typeof arg === "number") {
       if (!Number.isFinite(arg) || arg < ${CLASS_SIZE}) {
         throw new Error(
@@ -407,14 +418,14 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
         );
       }
       super(arg);
-    } else {
-      if (arg.byteLength < ${CLASS_SIZE}) {
-        throw new Error(
-          "Invalid construction of ${ClassBuffer}: Buffer size is too small",
-        );
-      }
-      super(arg);
+      return;
     }
+    if (arg.byteLength < ${CLASS_SIZE}) {
+      throw new Error(
+        "Invalid construction of ${ClassBuffer}: Buffer size is too small",
+      );
+    }
+    super(arg);
   }
 
 ${bufferEntryItems.join("\n")}}

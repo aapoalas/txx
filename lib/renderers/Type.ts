@@ -1,6 +1,9 @@
+import pascalCase from "https://deno.land/x/case@2.1.1/pascalCase.ts";
 import { ImportMap, TypedefEntry, TypeEntry } from "../types.d.ts";
 import {
   classesFile,
+  createSizedStruct,
+  getSizeOfType,
   isFunction,
   isPointer,
   isStructLike,
@@ -8,10 +11,13 @@ import {
   typesFile,
 } from "../utils.ts";
 
+const EMPTY_MAP = new Map<string, string>();
+
 export const renderTypeAsFfi = (
   dependencies: Set<string>,
   importMap: ImportMap,
   type: null | TypeEntry,
+  templateNameReplaceMap = EMPTY_MAP,
 ): string => {
   if (type === null) {
     return `"void"`;
@@ -79,11 +85,19 @@ export const renderTypeAsFfi = (
         dependencies,
         importMap,
         type.pointee,
+        templateNameReplaceMap,
       ))})`;
     }
     if (type.pointee.kind === "inline class<T>") {
       importMap.set("buf", SYSTEM_TYPES);
-      return `buf(${renderTypeAsFfi(dependencies, importMap, type.pointee)})`;
+      return `buf(${
+        renderTypeAsFfi(
+          dependencies,
+          importMap,
+          type.pointee,
+          templateNameReplaceMap,
+        )
+      })`;
     } else if (
       type.pointee.kind === "pointer" || type.pointee.kind === "class"
     ) {
@@ -92,10 +106,18 @@ export const renderTypeAsFfi = (
         dependencies,
         importMap,
         type.pointee,
+        templateNameReplaceMap,
       ))})`;
     } else if (type.pointee.kind === "function" || type.pointee.kind === "fn") {
       // Function pointer is just a function.
-      return renderTypeAsFfi(dependencies, importMap, type.pointee);
+      return `func(${
+        renderTypeAsFfi(
+          dependencies,
+          importMap,
+          type.pointee,
+          templateNameReplaceMap,
+        )
+      })`;
     } else if (type.pointee.kind === "typedef") {
       const isPODType = type.pointee.cursor.getType()!.isPODType();
       if (isPODType) {
@@ -104,70 +126,192 @@ export const renderTypeAsFfi = (
         importMap.set("ptr", SYSTEM_TYPES);
       }
       return isPODType
-        ? `buf(${(renderTypeAsFfi(dependencies, importMap, type.pointee))})`
-        : `ptr(${(renderTypeAsFfi(dependencies, importMap, type.pointee))})`;
+        ? `buf(${(renderTypeAsFfi(
+          dependencies,
+          importMap,
+          type.pointee,
+          templateNameReplaceMap,
+        ))})`
+        : `ptr(${(renderTypeAsFfi(
+          dependencies,
+          importMap,
+          type.pointee,
+          templateNameReplaceMap,
+        ))})`;
     } else if (type.pointee.kind === "enum") {
       importMap.set("buf", SYSTEM_TYPES);
       return `buf(${(renderTypeAsFfi(
         dependencies,
         importMap,
         type.pointee,
+        templateNameReplaceMap,
       ))})`;
     } else if (
       type.pointee.kind === "inline class" || type.pointee.kind === "[N]"
     ) {
       if (type.pointee.type.isPODType()) {
-        return renderTypeAsFfi(dependencies, importMap, "pointer");
+        return renderTypeAsFfi(
+          dependencies,
+          importMap,
+          "pointer",
+          templateNameReplaceMap,
+        );
       } else {
-        return renderTypeAsFfi(dependencies, importMap, "buffer");
+        return renderTypeAsFfi(
+          dependencies,
+          importMap,
+          "buffer",
+          templateNameReplaceMap,
+        );
       }
+    } else if (isStructLike(type.pointee)) {
+      importMap.set("buf", SYSTEM_TYPES);
+      return `buf(${(renderTypeAsFfi(
+        dependencies,
+        importMap,
+        type.pointee,
+        templateNameReplaceMap,
+      ))})`;
     } else {
-      throw new Error("Unreachable");
+      importMap.set("ptr", SYSTEM_TYPES);
+      return `ptr(${(renderTypeAsFfi(
+        dependencies,
+        importMap,
+        type.pointee,
+        templateNameReplaceMap,
+      ))})`;
     }
   } else if (type.kind === "function" || type.kind === "fn") {
-    return `{ parameters: [${
-      type.parameters.map((param) =>
-        renderTypeAsFfi(dependencies, importMap, param.type)
+    const parametersStrings = type.parameters.map((param) =>
+      renderTypeAsFfi(
+        dependencies,
+        importMap,
+        param.type,
+        templateNameReplaceMap,
       )
-        .join(", ")
-    }], result: ${renderTypeAsFfi(dependencies, importMap, type.result)} }`;
+    )
+      .join(", ");
+    if (type.parameters.length === 1 && parametersStrings.startsWith("...")) {
+      return `{ parameters: ${parametersStrings.substring(3)}, result: ${
+        renderTypeAsFfi(
+          dependencies,
+          importMap,
+          type.result,
+          templateNameReplaceMap,
+        )
+      } }`;
+    }
+    return `{ parameters: [${parametersStrings}], result: ${
+      renderTypeAsFfi(
+        dependencies,
+        importMap,
+        type.result,
+        templateNameReplaceMap,
+      )
+    } }`;
   } else if (type.kind === "inline class<T>") {
     const templateT = `${type.template.name}T`;
     importMap.set(templateT, typesFile(type.template.file));
     dependencies.add(templateT);
     return `${templateT}(${
-      type.parameters.map((param) =>
+      (type.parameters.map((param) =>
         param.kind === "parameter"
-          ? renderTypeAsFfi(dependencies, importMap, param.type)
+          ? renderTypeAsFfi(
+            dependencies,
+            importMap,
+            param.type,
+            templateNameReplaceMap,
+          )
           : param.name
-      )
+      ))
         .join(
           ", ",
         )
     })`;
   } else if (type.kind === "inline class") {
     return `{ struct: [${
-      type.fields.map((field) =>
-        renderTypeAsFfi(dependencies, importMap, field.type)
-      ).join(
-        ", ",
-      )
+      (type.base
+        ? [
+          renderTypeAsFfi(
+            dependencies,
+            importMap,
+            type.base,
+            templateNameReplaceMap,
+          ),
+        ]
+        : [])
+        .concat(
+          type.fields.map((field) =>
+            renderTypeAsFfi(
+              dependencies,
+              importMap,
+              field.type,
+              templateNameReplaceMap,
+            )
+          ),
+        ).join(
+          ", ",
+        )
     }] }`;
   } else if (type.kind === "[N]") {
-    const fieldString = renderTypeAsFfi(dependencies, importMap, type.element);
+    const fieldString = renderTypeAsFfi(
+      dependencies,
+      importMap,
+      type.element,
+      templateNameReplaceMap,
+    );
     return `{ struct: [${
-      new Array(type.length).fill(fieldString).join(",\n")
+      new Array(type.length).fill(fieldString).join(",")
     }] }`;
   } else if (type.kind === "inline union") {
-    const count = type.fields.length;
+    const uniqueSortedFields = [
+      ...new Set(
+        type.fields.sort((a, b) =>
+          getSizeOfType(b.type) - getSizeOfType(a.type)
+        ).map((field) =>
+          renderTypeAsFfi(
+            dependencies,
+            importMap,
+            field.type,
+            templateNameReplaceMap,
+          )
+        ),
+      ),
+    ];
+    const count = uniqueSortedFields.length;
     importMap.set(`union${count}`, SYSTEM_TYPES);
     return `union${count}(${
-      type.fields.map((field) =>
-        renderTypeAsFfi(dependencies, importMap, field.type)
-      ).join(
+      uniqueSortedFields.join(
         ", ",
       )
     })`;
+  } else if (type.kind === "member pointer") {
+    return JSON.stringify(createSizedStruct(type.type));
+  } else if (type.kind === "class<T>") {
+    importMap.set(`${type.name}T`, typesFile(type.file));
+    importMap.set("ptr", SYSTEM_TYPES);
+    return `${type.name}T`;
+  } else if (type.kind === "union") {
+    const name = type.name;
+    const nameT = `${name}T`;
+    importMap.set(nameT, typesFile(type.file));
+    dependencies.add(nameT);
+
+    return nameT;
+  } else if (type.kind === "<T>") {
+    if (type.isRef) {
+      importMap.set("ptr", SYSTEM_TYPES);
+    }
+    const TypeName = templateNameReplaceMap.get(type.name) ||
+      pascalCase(type.name);
+    if (type.isSpread && type.isRef) {
+      return `...${TypeName}.map(ptr)`;
+    } else if (type.isSpread) {
+      return `...${TypeName}`;
+    } else if (type.isRef) {
+      return `ptr(${TypeName})`;
+    }
+    return TypeName;
   } else {
     throw new Error(
       // @ts-expect-error kind and name will exist in any added TypeEntry types
@@ -238,6 +382,11 @@ export const renderTypeAsTS = (
   } else if (
     type.kind === "function" || type.kind === "fn"
   ) {
+    if ("name" in type && type.name) {
+      importMap.set(type.name, typesFile(type.file));
+      dependencies.add(type.name);
+      return type.name;
+    }
     return "Deno.PointerValue";
   } else if (type.kind === "pointer") {
     if (type.pointee === "self") {
@@ -258,6 +407,8 @@ export const renderTypeAsTS = (
         dependencies.add(name);
         return name;
       }
+    } else if (isFunction(type.pointee)) {
+      return renderTypeAsTS(dependencies, importMap, type.pointee);
     }
     return "Deno.PointerValue";
   } else if (type.kind === "class") {
@@ -267,12 +418,21 @@ export const renderTypeAsTS = (
     return name;
   } else if (
     type.kind === "inline class" || type.kind === "inline class<T>" ||
-    type.kind === "[N]"
+    type.kind === "[N]" || type.kind === "inline union"
   ) {
     return "Uint8Array";
+  } else if (type.kind === "member pointer") {
+    return "number";
+  } else if (type.kind === "class<T>") {
+    throw new Error("Unexpected class template entry");
+  } else if (type.kind === "union") {
+    throw new Error("Unexpected union entry");
+  } else if (type.kind === "<T>") {
+    throw new Error("Unexpected template parameter entry");
   } else {
     throw new Error(
-      "internal error: unknown type kind",
+      // @ts-expect-error No type kind should exist here
+      `internal error: unknown type kind ${type.kind} ${type.name}`,
     );
   }
 };

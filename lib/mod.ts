@@ -68,6 +68,7 @@ export const build = (configuration: ExportConfiguration) => {
 
   const includes = configuration.include.map((name) => `-I${name}`);
   includes.push("-xc++");
+  includes.push("-std=c++20");
   const tu = index.parseTranslationUnit(
     includesFileName,
     includes,
@@ -218,6 +219,8 @@ const gatherEntries = (context: Context, parentCursor: CXCursor) =>
         context.addClassTemplate(cursor);
         break;
       case CXCursorKind.CXCursor_ClassTemplatePartialSpecialization:
+        context.addClassTemplatePartialSpecialization(cursor);
+        break;
       case CXCursorKind.CXCursor_FunctionTemplate:
         /**
          * TODO: Support templates
@@ -235,7 +238,7 @@ const gatherEntries = (context: Context, parentCursor: CXCursor) =>
          */
         break;
       case CXCursorKind.CXCursor_UnionDecl:
-        // TODO: Support unions somehow
+        context.addUnion(cursor);
         break;
       case CXCursorKind.CXCursor_VarDecl:
         context.addVar(cursor);
