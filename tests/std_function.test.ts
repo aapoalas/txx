@@ -23,7 +23,7 @@ Deno.test("std::function", async (t) => {
       methods: true,
       name: "MyClass",
     }],
-    include: [TESTS_BASE_PATH, "/lib64/clang/14.0.6/include"],
+    include: [TESTS_BASE_PATH, "/lib64/clang/15.0.7/include"],
     outputPath: OUTPUT_PATH,
   });
   await t.step("nullary", async (t) => {

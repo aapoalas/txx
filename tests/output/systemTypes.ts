@@ -8,6 +8,12 @@ export const union2 = <const T, const U>(a: T, _b: U): T | U => a;
 
 export const ptr = (_: unknown) => "pointer" as const;
 
+export const isFunction = (
+  type: unknown,
+): type is Deno.UnsafeCallbackDefinition =>
+  type !== null && typeof type === "object" && "parameters" in type &&
+  Array.isArray(type.parameters) && "result" in type;
+
 export const func = (_?: unknown) => "function" as const;
 
 export const _Nocopy_typesT = union3(
@@ -49,11 +55,15 @@ export const enum _Manager_operation {
 export const functionT = <const Signature>(
   _Signature: Signature,
 ) => {
-  if (isProperType({ parameters: ["buffer"], result: "buffer" })) {
+  if (isFunction(_Signature)) {
+    const { parameters: _ArgTypes, result: _Res } = _Signature;
     return {
       struct: [
         _Function_baseT, // base class, size 24, align 8
-        { struct: [] }, // _M_invoker
+        func({
+          parameters: [ptr(_Any_dataT), ..._ArgTypes.map(ptr)],
+          result: _Res,
+        }), // _M_invoker
       ],
     };
   } else {

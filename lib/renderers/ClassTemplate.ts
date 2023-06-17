@@ -4,11 +4,11 @@ import {
   AbsoluteTypesFilePath,
   ClassTemplateEntry,
   ClassTemplatePartialSpecialization,
+  ImportMap,
   RenderData,
 } from "../types.d.ts";
-import { createRenderDataEntry, typesFile } from "../utils.ts";
+import { createRenderDataEntry, SYSTEM_TYPES, typesFile } from "../utils.ts";
 import { renderTypeAsFfi } from "./Type.ts";
-import { visitClassEntry } from "../visitors/Class.ts";
 
 export const renderClassTemplate = (
   renderData: RenderData,
@@ -25,6 +25,7 @@ export const renderClassTemplate = (
       renderData,
       dependencies,
       specialization,
+      entry,
     );
     if (result) {
       specializations.push(
@@ -36,6 +37,7 @@ export const renderClassTemplate = (
     renderData,
     dependencies,
     entry.defaultSpecialization,
+    entry,
   );
   if (defaultSpec) {
     specializations.push(defaultSpec);
@@ -67,6 +69,7 @@ const renderSpecialization = (
   { importsInTypesFile }: RenderData,
   dependencies: Set<string>,
   specialization: ClassTemplatePartialSpecialization,
+  entry: ClassTemplateEntry,
 ) => {
   if (!specialization.cursor.isDefinition()) {
     return `{
@@ -79,6 +82,13 @@ const renderSpecialization = (
   ) {
     return null;
   }
+
+  const replaceMap = new Map<string, string>();
+
+  specialization.parameters.forEach((value, index) =>
+    replaceMap.set(`type-parameter-0-${index}`, value.name)
+  );
+
   const inheritedPointers: string[] = [];
   const fields: string[] = [];
   for (const base of specialization.bases) {
@@ -119,7 +129,12 @@ const renderSpecialization = (
     // TODO: field type is incorrectly 'inline class' when in reality it is a function pointer.
     fields.push(
       `${
-        renderTypeAsFfi(dependencies, importsInTypesFile, field.type)
+        renderTypeAsFfi(
+          dependencies,
+          importsInTypesFile,
+          field.type,
+          replaceMap,
+        )
       }, // ${field.name}${offsetString}${sizeString}${alignString}`,
     );
   }
@@ -156,15 +171,59 @@ const renderSpecialization = (
   }
 
   const specializationCheckString = specialization.application.length
-    ? `if (isProperType(${
-      specialization.application.map((type) =>
-        renderTypeAsFfi(dependencies, importsInTypesFile, type)
-      ).join(",")
-    })) `
+    ? `if (${generateTypeCheck(importsInTypesFile, specialization, entry)}) `
     : "";
 
   return `${specializationCheckString}{
+  ${
+    generateDestructuring(
+      specialization,
+      entry,
+      dependencies,
+      importsInTypesFile,
+      replaceMap,
+    )
+  }
   return { struct: [${fields.join("\n")}
 ] };
 }`;
+};
+
+const generateTypeCheck = (
+  importsInTypesFile: ImportMap,
+  specialization: ClassTemplatePartialSpecialization,
+  entry: ClassTemplateEntry,
+) => {
+  if (
+    specialization.application.length === 1 &&
+    typeof specialization.application[0] === "object" &&
+    specialization.application[0].kind === "fn"
+  ) {
+    importsInTypesFile.set("isFunction", SYSTEM_TYPES);
+    return `isFunction(${entry.parameters[0].name})`;
+  }
+  throw new Error("Unknown template type check kind");
+};
+
+const generateDestructuring = (
+  specialization: ClassTemplatePartialSpecialization,
+  entry: ClassTemplateEntry,
+  dependencies: Set<string>,
+  importsInTypesFile: ImportMap,
+  replaceMap: Map<string, string>,
+) => {
+  if (
+    specialization.application.length === 1 &&
+    typeof specialization.application[0] === "object"
+  ) {
+    return `const ${
+      renderTypeAsFfi(
+        dependencies,
+        importsInTypesFile,
+        specialization.application[0],
+        replaceMap,
+      )
+    } = ${entry.parameters[0].name};`;
+  }
+  throw new Error("Unknown template type check kind");
 };

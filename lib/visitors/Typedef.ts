@@ -1,4 +1,3 @@
-import { CXTypeKind } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
 import { Context } from "../Context.ts";
 import { TypedefEntry } from "../types.d.ts";
 import { visitType } from "./Type.ts";

@@ -337,8 +337,12 @@ export const visitBaseClass = (
         parameters.push(
           {
             kind: "<T>",
-            name: targName.replace("...", ""),
+            name: targName.replace("...", "").replace(" &&", "").replace(
+              " &",
+              "",
+            ),
             isSpread: targName.includes("..."),
+            isRef: targName.includes(" &"),
           } satisfies TemplateParameter,
         );
       }

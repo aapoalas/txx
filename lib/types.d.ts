@@ -148,6 +148,7 @@ export interface TemplateParameter {
   name: string;
   kind: "<T>";
   isSpread: boolean;
+  isRef: boolean;
 }
 
 export interface Parameter {
@@ -242,6 +243,7 @@ export type TypeEntry =
   | InlineUnionTypeEntry
   | MemberPointerTypeEntry
   | PointerTypeEntry
+  | TemplateParameter
   | TypedefEntry
   | UnionEntry;
 

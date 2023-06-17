@@ -163,8 +163,12 @@ export const visitClassTemplateEntry = (
       ) {
         defaultSpecialization.parameters.push({
           kind: "<T>",
-          name: gc.getSpelling().replace("...", ""),
+          name: gc.getSpelling().replace("...", "").replace(" &&", "").replace(
+            " &",
+            "",
+          ),
           isSpread: gc.getSpelling().includes("..."),
+          isRef: gc.getSpelling().includes(" &"),
         });
       } else if (
         gc.kind === CXCursorKind.CXCursor_TemplateTemplateParameter
@@ -252,6 +256,7 @@ export const visitClassTemplateEntry = (
           kind: "<T>",
           name: gc.getSpelling(),
           isSpread: gc.getPrettyPrinted().includes("typename ..."),
+          isRef: gc.getPrettyPrinted().includes(" &"),
         });
       } else if (
         gc.kind === CXCursorKind.CXCursor_TemplateTemplateParameter
@@ -295,6 +300,8 @@ export const visitClassTemplateInstance = (
         name: ttarg.getSpelling(),
         isSpread: ttarg.getTypeDeclaration()?.getPrettyPrinted()
           .includes("typename ...") ?? false,
+        isRef: ttarg.getTypeDeclaration()?.getPrettyPrinted()
+          .includes(" &") ?? false,
       });
     }
   }

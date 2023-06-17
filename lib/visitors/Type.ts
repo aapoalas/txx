@@ -53,20 +53,27 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
       const templateKind = templateDeclaration.getTemplateKind();
       if (templateKind === CXCursorKind.CXCursor_ClassDecl) {
         const template: ClassTemplateEntry = {
-          bases: [],
-          constructors: [],
           cursor: templateDeclaration,
-          destructor: null,
-          fields: [],
+          defaultSpecialization: {
+            application: [],
+            bases: [],
+            constructors: [],
+            cursor: canonicalType.getTypeDeclaration()!,
+            destructor: null,
+            fields: [],
+            kind: "partial class<T>",
+            methods: [],
+            parameters: [],
+            used: true,
+            virtualBases: [],
+          },
           file: getFileNameFromCursor(templateDeclaration),
           kind: "class<T>",
-          methods: [],
           name: templateName,
           nsName: templateNsName,
           parameters: [],
-          used: true,
           partialSpecializations: [],
-          virtualBases: [],
+          used: true,
         };
         const parameters: (Parameter | TemplateParameter)[] = [];
         for (let i = 0; i < targc; i++) {
@@ -118,6 +125,22 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
           file: template.file,
         };
       }
+    } else if (name.startsWith("type-parameter-")) {
+      const isSpread = name.endsWith("...");
+      let mutName = isSpread ? name.substring(0, name.length - 3) : name;
+      const isRvalueRef = mutName.endsWith(" &&");
+      const isLvalueRef = mutName.endsWith(" &");
+      if (isRvalueRef) {
+        mutName = mutName.substring(0, mutName.length - 3);
+      } else if (isLvalueRef) {
+        mutName = mutName.substring(0, mutName.length - 2);
+      }
+      return {
+        name: mutName,
+        kind: "<T>",
+        isSpread,
+        isRef: isLvalueRef || isRvalueRef,
+      } satisfies TemplateParameter;
     }
     return "buffer";
   } else if (kind === CXTypeKind.CXType_Elaborated) {
@@ -244,6 +267,7 @@ export const createInlineTypeEntry = (
     if (result === null) {
       throw new Error("Failed to create type");
     }
+    return result;
   }
   // Drop out the template part from our inline defined template specification.
   if (type.getNumberOfTemplateArguments() <= 0) {

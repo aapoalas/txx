@@ -156,6 +156,11 @@ export const renderSystemFileConstant = (constant: string): RenderDataEntry => {
       contents = `export const cstringT = "buffer";
 `;
       break;
+    case "isFunction":
+      contents =
+        `export const isFunction = (type: unknown): type is Deno.UnsafeCallbackDefinition => type !== null && typeof type === "object" && "parameters" in type && Array.isArray(type.parameters) && "result" in type;
+`;
+      break;
     default:
       if (constant.startsWith("union")) {
         contents =
