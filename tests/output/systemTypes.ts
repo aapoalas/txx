@@ -93,7 +93,6 @@ export const functionT = <
         parameters: [ptr(_Any_dataT), ...argTypes.map(ptr)],
         result: res,
       }), // _M_invoker
-      _Function_baseT, // base class, size 24, align 8
     ],
   } as const;
 };
