@@ -292,22 +292,10 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
         if (isPassedInRegisters(parameterType)) {
           // POD structs get passed as "struct" type.
           parameterType.usedAsBuffer = true;
-        } else {
-          // Non-POD structs get passed as references even when
-          // the type definition calls for pass-by-value.
-          parameterType.usedAsPointer = true;
         }
       } else if (isInlineTemplateStruct(parameterType)) {
         if (isPassedInRegisters(parameterType)) {
           parameterType.specialization.usedAsBuffer = true;
-        } else {
-          parameterType.specialization.usedAsPointer = true;
-        }
-      } else if (isPointer(parameterType)) {
-        if (isStruct(parameterType.pointee)) {
-          parameterType.pointee.usedAsPointer = true;
-        } else if (isInlineTemplateStruct(parameterType.pointee)) {
-          parameterType.pointee.specialization.usedAsPointer = true;
         }
       }
 
@@ -323,6 +311,24 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
       throw new Error("Failed to get result type");
     }
     const result = visitType(context, resultType);
+
+    if (isStruct(result)) {
+      // By-value struct returns as a Uint8Array,
+      // by-ref struct takes an extra Uint8Array parameter.
+      // Either way, the struct ends up as a buffer.
+      result.usedAsBuffer = true;
+    } else if (isInlineTemplateStruct(result)) {
+      // Same thing as above: One way or another the template
+      // instance struct ends up as a buffer.
+      result.specialization.usedAsBuffer = true;
+    } else if (isPointer(result)) {
+      if (isStruct(result.pointee)) {
+        result.pointee.usedAsPointer = true;
+      } else if (isInlineTemplateStruct(result.pointee)) {
+        result.pointee.specialization.usedAsPointer = true;
+      }
+    }
+
     return {
       kind: "fn",
       parameters,

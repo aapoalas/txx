@@ -1,7 +1,15 @@
-import { CXCursor } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
+import {
+  CXCursor,
+  CXType,
+} from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
 import { Context } from "../Context.ts";
-import type { Parameter, TypeEntry } from "../types.d.ts";
-import { isInlineTemplateStruct, isPointer, isStruct } from "../utils.ts";
+import type { FunctionTypeEntry, Parameter, TypeEntry } from "../types.d.ts";
+import {
+  isInlineTemplateStruct,
+  isPassedInRegisters,
+  isPointer,
+  isStruct,
+} from "../utils.ts";
 import { visitType } from "./Type.ts";
 
 export const visitFunctionCursor = (
@@ -42,6 +50,14 @@ export const visitFunctionCursor = (
     if (typeof type === "object" && "used" in type) {
       type.used = true;
     }
+
+    if (isStruct(type) && !isPassedInRegisters(type)) {
+      // Pass-by-value struct as a parameter only accepts Uint8Arrays in Deno.
+      type.usedAsBuffer = true;
+    } else if (isInlineTemplateStruct(type) && !isPassedInRegisters(type)) {
+      type.specialization.usedAsBuffer = true;
+    }
+
     parameters.push({
       kind: "parameter",
       comment: null,
@@ -62,8 +78,13 @@ export const visitFunctionCursor = (
     }
 
     if (isStruct(result)) {
+      // By-value struct returns as a Uint8Array,
+      // by-ref struct takes an extra Uint8Array parameter.
+      // Either way, the struct ends up as a buffer.
       result.usedAsBuffer = true;
     } else if (isInlineTemplateStruct(result)) {
+      // Same thing as above: One way or another the template
+      // instance struct ends up as a buffer.
       result.specialization.usedAsBuffer = true;
     } else if (isPointer(result)) {
       if (isStruct(result.pointee)) {

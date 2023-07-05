@@ -156,10 +156,6 @@ export const isPassedInRegisters = (entry: TypeEntry): boolean => {
       return true;
     }
     const canonicalType = entry.cursor.getType()!.getCanonicalType();
-    if (canonicalType.getSizeOf() > 16) {
-      // Too large to be returned in registers: C++ RVO's this.
-      return false;
-    }
     const cursor = canonicalType.getTypeDeclaration()!;
     if (
       cursor.kind === CXCursorKind.CXCursor_ClassDecl ||
@@ -172,8 +168,7 @@ export const isPassedInRegisters = (entry: TypeEntry): boolean => {
     }
     return canonicalType.isPODType();
   } else {
-    if (!("type" in entry) || entry.type.getSizeOf() > 16) {
-      // Too large to be returned in registers: C++ RVO's this.
+    if (!("type" in entry)) {
       return false;
     }
     const canonicalType = entry.type.getCanonicalType();
@@ -183,11 +178,7 @@ export const isPassedInRegisters = (entry: TypeEntry): boolean => {
 
 const isClassPassedInRegisters = (
   cursor: CXCursor,
-  type = cursor.getType()!,
 ): boolean => {
-  if (type.getSizeOf() > 16) {
-    return false;
-  }
   const result = cursor.visitChildren((child) => {
     if (child.kind === CXCursorKind.CXCursor_CXXBaseSpecifier) {
       if (!isClassPassedInRegisters(child.getDefinition()!)) {
@@ -217,9 +208,6 @@ const isClassPassedInRegisters = (
 const isTypedefReturnedInRegisters = (
   type: CXType,
 ): boolean => {
-  if (type.getSizeOf() > 16) {
-    return false;
-  }
   if (type.kind === CXTypeKind.CXType_Record) {
     return isClassPassedInRegisters(type.getTypeDeclaration()!);
   }
