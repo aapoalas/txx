@@ -288,15 +288,14 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
         throw new Error("Failed to visit parameter type");
       }
 
-      if (isStruct(parameterType)) {
-        if (isPassedInRegisters(parameterType)) {
-          // POD structs get passed as "struct" type.
-          parameterType.usedAsBuffer = true;
-        }
-      } else if (isInlineTemplateStruct(parameterType)) {
-        if (isPassedInRegisters(parameterType)) {
-          parameterType.specialization.usedAsBuffer = true;
-        }
+      if (isStruct(parameterType) && isPassedInRegisters(parameterType)) {
+        // POD structs get passed as "struct" type which only accepts Uint8Arrays in Deno.
+        parameterType.usedAsBuffer = true;
+      } else if (
+        isInlineTemplateStruct(parameterType) &&
+        isPassedInRegisters(parameterType)
+      ) {
+        parameterType.specialization.usedAsBuffer = true;
       }
 
       parameters.push({
