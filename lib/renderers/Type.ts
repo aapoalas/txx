@@ -5,8 +5,10 @@ import {
   createSizedStruct,
   getSizeOfType,
   isFunction,
+  isInlineTemplateStruct,
   isPassableByValue,
   isPointer,
+  isStruct,
   isStructLike,
   SYSTEM_TYPES,
   typesFile,
@@ -441,7 +443,51 @@ export const renderTypeAsTS = (
     return "Deno.PointerValue";
   } else if (type.kind === "pointer") {
     if (type.pointee === "self") {
+      // Self can only appear in callback definitions of classes.
       return "Deno.PointerValue";
+    }
+    if (isStruct(type.pointee)) {
+      if (intoJS || !type.pointee.usedAsBuffer && type.pointee.usedAsPointer) {
+        // Pointer to struct coming to JS: This is always a pointer object.
+        // Otherwise if the pointer to a struct is leaving JS and the struct
+        // is only ever seen as a pointer, use a pointer object.
+        const namePointer = `${type.pointee.name}Pointer`;
+        importMap.set(`type ${namePointer}`, typesFile(type.pointee.file));
+        dependencies.add(namePointer);
+        return namePointer;
+      } else {
+        // Otherwise us a buffer.
+        const nameBuffer = `${type.pointee.name}Buffer`;
+        importMap.set(
+          `type ${nameBuffer}`,
+          classesFile(type.pointee.file),
+        );
+        dependencies.add(nameBuffer);
+        return nameBuffer;
+      }
+    } else if (isInlineTemplateStruct(type.pointee)) {
+      if (
+        intoJS ||
+        !type.pointee.specialization.usedAsBuffer &&
+          type.pointee.specialization.usedAsPointer
+      ) {
+        // Pointer to struct coming to JS: This is always a pointer object.
+        // Otherwise if the pointer to a struct is leaving JS and the struct
+        // is only ever seen as a pointer, use a pointer object.
+        const namePointer = `${type.pointee.name}Pointer`;
+        importMap.set(`type ${namePointer}`, typesFile(type.pointee.file));
+        dependencies.add(namePointer);
+        return namePointer;
+      } else {
+        // Otherwise us a buffer.
+        const nameBuffer = `${type.pointee.name}Buffer`;
+        importMap.set(
+          `type ${nameBuffer}`,
+          classesFile(type.pointee.file),
+        );
+        dependencies.add(nameBuffer);
+        return nameBuffer;
+      }
     }
     if (isStructLike(type.pointee) && type.pointee.name) {
       if (intoJS) {

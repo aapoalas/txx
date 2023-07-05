@@ -32,8 +32,8 @@ import {
   createDummyRenderDataEntry,
   createRenderDataEntry,
   FFI,
+  isInlineTemplateStruct,
   isPassableByValue,
-  isPointer,
   isPointerToStructLike,
   isStruct,
   isStructLike,
@@ -58,20 +58,9 @@ export const renderClass = ({
   importsInTypesFile,
   typesFilePath,
 }: RenderData, entry: ClassEntry) => {
-  if (entry.usedAsBuffer || entry.usedAsPointer) {
-    console.group(entry.nsName);
-    if (entry.usedAsBuffer) {
-      console.log("Is used as buffer");
-    }
-    if (entry.usedAsPointer) {
-      console.log("Is used as pointer");
-    }
-    console.groupEnd();
-  }
   const ClassPointer = `${entry.name}Pointer`;
   const ClassBuffer = `${entry.name}Buffer`;
   const ClassT = `${entry.name}T`;
-  const bufClassT = `buf(${ClassT})`;
   const lib__Class = entry.nsName.replaceAll(SEP, "__");
   const CLASS_SIZE = `${constantCase(entry.name)}_SIZE`;
   const dependencies = new Set<string>();
@@ -97,7 +86,7 @@ export const renderClass = ({
   for (const base of entry.bases) {
     const BaseT = renderTypeAsFfi(dependencies, importsInTypesFile, base);
     if (
-      fields.length === 0 && (isStruct(base) || isStructOrTypedefStruct(base))
+      fields.length === 0 && isStructOrTypedefStruct(base)
     ) {
       // Pointer to class with inheritance is only usable
       // as the base class if the base class is concrete and
@@ -141,7 +130,7 @@ export const renderClass = ({
   for (const base of entry.virtualBases) {
     const BaseT = renderTypeAsFfi(dependencies, importsInTypesFile, base);
     if (
-      fields.length === 0 && (isStruct(base) || isStructOrTypedefStruct(base))
+      fields.length === 0 && isStructOrTypedefStruct(base)
     ) {
       // Pointer to class with inheritance is only usable
       // as the base class if the base class is concrete and
@@ -606,6 +595,23 @@ const renderClassConstructor = (
       method.parameters.map((x) => createParameterOverloadName(x)).join("And")
     }`;
   }
+  const parameterStrings: string[] = [`buf(${ClassT})`];
+  const parameterNames: string[] = ["self"];
+  const parameterRenderData: ClassParameterRenderData[] = [];
+  for (const param of method.parameters) {
+    parameterNames.push(param.name);
+    parameterStrings.push(
+      renderFunctionParameter(dependencies, importsInBindingsFile, param),
+    );
+    parameterRenderData.push({
+      name: param.name,
+      type: renderTypeAsTS(dependencies, importsInClassesFile, param.type),
+    });
+  }
+  parameterRenderData.push({
+    name: "self",
+    defaultValue: `new ${ClassBuffer}()`,
+  });
   Constructor = `${Constructor}${WithName}`;
   importsInClassesFile.set(`${lib__Class}__${Constructor}`, FFI);
   importsInBindingsFile.set(ClassT, typesFilePath);
@@ -614,34 +620,17 @@ const renderClassConstructor = (
   const bindingsFileData = renderFunctionExport(
     `${lib__Class}__${Constructor}`,
     method.manglings[1],
-    [`buf(${ClassT})`].concat(
-      method.parameters.map((param) =>
-        renderFunctionParameter(dependencies, importsInBindingsFile, param)
-      ),
-    ),
+    parameterStrings,
     `"void"`,
   );
   entriesInBindingsFile.push(createRenderDataEntry([], [], bindingsFileData));
   bufferEntryItems.push(
     renderClassMethodBinding(
       Constructor,
-      method.parameters.map((param): ClassParameterRenderData => {
-        return ({
-          name: param.name,
-          type: renderTypeAsTS(
-            dependencies,
-            importsInClassesFile,
-            param.type,
-          ),
-        });
-      })
-        .concat({ name: "self", defaultValue: `new ${ClassBuffer}()` }),
+      parameterRenderData,
       ClassBuffer,
       [
-        `${lib__Class}__${Constructor}(${
-          ["self"].concat(method.parameters.map((param) => param.name))
-            .join(", ")
-        });`,
+        `${lib__Class}__${Constructor}(${parameterNames.join(", ")});`,
         "return self;",
       ],
       {
@@ -845,6 +834,32 @@ const renderClassMethod = (
     },
   );
   bufferEntryItems.push(classMethodString);
+
+  let count = 0;
+  const asd: string[] = [];
+  for (const param of method.parameters) {
+    if (
+      isStruct(param.type) && !isPassableByValue(param.type) &&
+      param.type.usedAsBuffer && param.type.usedAsPointer
+    ) {
+      asd.push(param.type.name);
+      count++;
+    } else if (
+      isInlineTemplateStruct(param.type) && !isPassableByValue(param.type) &&
+      param.type.specialization.usedAsBuffer &&
+      param.type.specialization.usedAsPointer
+    ) {
+      asd.push(param.type.name!);
+      count++;
+    }
+  }
+  if (count) {
+    console.group(renameForbiddenMethods(methodName, method));
+    for (const a of asd) {
+      console.log(a);
+    }
+    console.groupEnd();
+  }
 };
 
 interface ClassParameterRenderData {

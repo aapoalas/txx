@@ -7,6 +7,7 @@ import {
   RenderData,
 } from "../types.d.ts";
 import {
+  createDummyRenderDataEntry,
   createRenderDataEntry,
   isPointer,
   isStruct,
@@ -62,12 +63,24 @@ export const renderClassTemplate = (
   }
   const contents = `export const ${ClassT} = <${templateParameters.join(", ")}>(
     ${callParameters.join("\n    ")}
-) => {
+) => ${
+    specializations.length === 1 && !specializations[0].startsWith("if (")
+      ? specializations[0]
+      : `{
   ${specializations.join(" else ")}
-};
+}`
+  };
 `;
   entriesInTypesFile.push(
     createRenderDataEntry([ClassT], [...dependencies], contents),
+  );
+  renderData.entriesInClassesFile.push(
+    createDummyRenderDataEntry(
+      `export class ${entry.name}Buffer<${
+        templateParameters.map((name) => name.replace("const ", "_")).join(", ")
+      }> extends Uint8Array {};
+`,
+    ),
   );
 };
 
@@ -87,17 +100,6 @@ const renderSpecialization = (
     specialization.fields.length === 0
   ) {
     return null;
-  }
-
-  if (specialization.usedAsBuffer || specialization.usedAsPointer) {
-    console.group(entry.nsName);
-    if (specialization.usedAsBuffer) {
-      console.log("Is used as buffer");
-    }
-    if (specialization.usedAsPointer) {
-      console.log("Is used as pointer");
-    }
-    console.groupEnd();
   }
 
   const replaceMap = new Map<string, string>();
@@ -199,6 +201,24 @@ const renderSpecialization = (
     return null;
   }
 
+  if (inheritedPointers.length === 0) {
+    inheritedPointers.push(`NonNullable<Deno.PointerValue>`);
+  }
+
+  const symbolStrings: string[] = [];
+  const templateTypes: string[] = [];
+  specialization.application.forEach((_, i) => {
+    symbolStrings.push(`declare const ${entry.name}Arg${i}: unique symbol;`);
+    templateTypes.push(`Arg${i}`);
+  });
+  inheritedPointers.push(
+    `{ [${entry.name}]: unknown; ${
+      templateTypes.map((type, i) => `[${entry.name}${type}]: ${type};`).join(
+        " ",
+      )
+    } }`,
+  );
+
   const specializationCheckString = specialization.application.length
     ? `if (${generateTypeCheck(importsInTypesFile, specialization, entry)}) `
     : "";
@@ -213,6 +233,9 @@ const renderSpecialization = (
       replaceMap,
     )
   }
+  ${symbolStrings.join("\n")}
+  declare const ${entry.name}: unique symbol;
+  type ${entry.name}Pointer = ${inheritedPointers.join(" & ")};
   return { struct: [
     ${fields.join("\n    ")}
 ] } as const;

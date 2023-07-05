@@ -276,6 +276,8 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
       type,
     } satisfies ConstantArrayTypeEntry;
   } else if (kind === CXTypeKind.CXType_FunctionProto) {
+    // Function type definitions are presumed to always be callbacks.
+    // Otherwise they don't make too much sense.
     const parameters: Parameter[] = [];
     const argc = type.getNumberOfArgumentTypes();
     for (let i = 0; i < argc; i++) {
@@ -288,14 +290,35 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
         throw new Error("Failed to visit parameter type");
       }
 
-      if (isStruct(parameterType) && isPassableByValue(parameterType)) {
-        // POD structs get passed as "struct" type which only accepts Uint8Arrays in Deno.
-        parameterType.usedAsBuffer = true;
+      if (isStruct(parameterType)) {
+        // Struct type as a callback parameter: This is either pass-by-value or pass-by-ref.
+        // If it is pass-by-value then it comes to Deno as a Uint8Array from which it
+        // can be transformed into ClassBuffer without allocating through
+        // `new ClassBuffer(param.buffer)`.
+        // If it is pass-by-ref then it comes to Deno as a `Deno.PointerObject`.
+        if (isPassableByValue(parameterType)) {
+          parameterType.usedAsBuffer = true;
+        } else {
+          parameterType.usedAsPointer = true;
+        }
       } else if (
-        isInlineTemplateStruct(parameterType) &&
-        isPassableByValue(parameterType)
+        isInlineTemplateStruct(parameterType)
       ) {
-        parameterType.specialization.usedAsBuffer = true;
+        // Same goes for template instances.
+        if (
+          isPassableByValue(parameterType)
+        ) {
+          parameterType.specialization.usedAsBuffer = true;
+        } else {
+          parameterType.specialization.usedAsPointer = true;
+        }
+      } else if (isPointer(parameterType)) {
+        // Pointers to struct types come to Deno as `Deno.PointerObject`.
+        if (isStruct(parameterType.pointee)) {
+          parameterType.pointee.usedAsPointer = true;
+        } else if (isInlineTemplateStruct(parameterType.pointee)) {
+          parameterType.pointee.specialization.usedAsPointer = true;
+        }
       }
 
       parameters.push({
