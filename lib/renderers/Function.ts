@@ -71,6 +71,9 @@ export const renderFunctionParameter = (
     // Use buffer if explicitly asked or if not explicitly asked to use pointer.
     useBuffer = param.type.usedAsBuffer || !param.type.usedAsPointer;
   } else if (isInlineTemplateStruct(param.type)) {
+    if (!param.type.specialization) {
+      param.type.specialization = param.type.template.defaultSpecialization!;
+    }
     useBuffer = param.type.specialization.usedAsBuffer ||
       !param.type.specialization.usedAsPointer;
   }

@@ -14,9 +14,11 @@ import { SEP } from "../Context.ts";
 import {
   AbsoluteSystemTypesFilePath,
   AbsoluteTypesFilePath,
+  BaseClassEntry,
   ClassConstructor,
   ClassDestructor,
   ClassEntry,
+  ClassField,
   ClassMethod,
   EnumEntry,
   ImportMap,
@@ -82,72 +84,22 @@ export const renderClass = ({
   }
 
   const inheritedPointers: string[] = [];
+  const fieldRenderOptions = {
+    dependencies,
+    inheritedPointers,
+    importsInTypesFile,
+  };
 
   for (const base of entry.bases) {
-    const BaseT = renderTypeAsFfi(dependencies, importsInTypesFile, base);
-    if (
-      fields.length === 0 && isStructOrTypedefStruct(base)
-    ) {
-      // Pointer to class with inheritance is only usable
-      // as the base class if the base class is concrete and
-      // is the very first field in the inheriting class
-      // and thus holds the vtable pointer.
-      const BasePointer = `${base.name}Pointer`;
-      inheritedPointers.push(BasePointer);
-      importsInTypesFile.set(BasePointer, typesFile(base.file));
-    }
-    if (base.kind === "inline class<T>") {
-      importsInTypesFile.set(BaseT, typesFile(base.template.file));
-    } else {
-      importsInTypesFile.set(BaseT, typesFile(base.file));
-    }
-    const baseType: CXType = base.cursor.getType()!;
-
-    if (!baseType) {
-      continue;
-    }
-
-    const size = baseType.getSizeOf();
-    const align = baseType.getAlignOf();
-    fields.push(
-      `${BaseT}, // base class, size ${size}, align ${align}`,
-    );
+    renderClassBaseField(fieldRenderOptions, fields, base);
   }
 
-  entry.fields.forEach((field) => {
-    const fieldType = field.cursor.getType()!;
-    const size = fieldType.getSizeOf();
-    const align = fieldType.getAlignOf();
-    return fields.push(
-      `${
-        renderTypeAsFfi(dependencies, importsInTypesFile, field.type)
-      }, // ${field.name}, offset ${
-        field.cursor.getOffsetOfField() / 8
-      }, size ${size}, align ${align}`,
-    );
-  });
+  for (const field of entry.fields) {
+    renderClassField(fieldRenderOptions, fields, field);
+  }
 
   for (const base of entry.virtualBases) {
-    const BaseT = renderTypeAsFfi(dependencies, importsInTypesFile, base);
-    if (
-      fields.length === 0 && isStructOrTypedefStruct(base)
-    ) {
-      // Pointer to class with inheritance is only usable
-      // as the base class if the base class is concrete and
-      // is the very first field in the inheriting class
-      // and thus holds the vtable pointer.
-      const BasePointer = `${base.name}Pointer`;
-      inheritedPointers.push(BasePointer);
-      importsInTypesFile.set(BasePointer, typesFile(base.file));
-    }
-    importsInTypesFile.set(BaseT, typesFile(base.file));
-
-    const baseType = base.cursor.getType()!;
-    const size = baseType.getSizeOf();
-    const align = baseType.getAlignOf();
-    fields.push(
-      `${BaseT}, // base class, size ${size}, align ${align}`,
-    );
+    renderClassBaseField(fieldRenderOptions, fields, base);
   }
 
   if (inheritedPointers.length === 0) {
@@ -524,6 +476,89 @@ const classHasVirtualMethod = (cursor: CXCursor): boolean => {
   );
 };
 
+interface FieldRenderOptions {
+  dependencies: Set<string>;
+  importsInTypesFile: ImportMap;
+  inheritedPointers: string[];
+  replaceMap?: Map<string, string>;
+}
+
+export const renderClassBaseField = (
+  { dependencies, importsInTypesFile, inheritedPointers }: FieldRenderOptions,
+  fields: string[],
+  base: BaseClassEntry,
+) => {
+  const BaseT = renderTypeAsFfi(dependencies, importsInTypesFile, base);
+  let baseTypeSource: AbsoluteTypesFilePath;
+  if (base.kind === "inline class<T>") {
+    if (
+      base.specialization?.bases.length === 0 &&
+      base.specialization.fields.length === 0 &&
+      base.specialization.virtualBases.length === 0
+    ) {
+      return;
+    }
+    baseTypeSource = typesFile(base.template.file);
+  } else {
+    if (
+      base.kind === "class" && base.bases.length === 0 &&
+      base.fields.length === 0 && base.virtualBases.length === 0
+    ) {
+      return;
+    }
+    baseTypeSource = typesFile(base.file);
+  }
+  const baseType = base.cursor.getType();
+  if (
+    fields.length === 0 && (isStruct(base) || isStructOrTypedefStruct(base))
+  ) {
+    // Pointer to class with inheritance is only usable
+    // as the base class if the base class is concrete and
+    // is the very first field in the inheriting class
+    // and thus holds the vtable pointer.
+    const BasePointer = `${base.name}Pointer`;
+    inheritedPointers.push(BasePointer);
+    importsInTypesFile.set(BasePointer, baseTypeSource);
+  }
+  importsInTypesFile.set(BaseT, baseTypeSource);
+
+  const size = baseType?.getSizeOf();
+  const align = baseType?.getAlignOf();
+  if (size && align) {
+    fields.push(`${BaseT}, // base class, size ${size}, align ${align}`);
+  } else {
+    fields.push(`${BaseT}, // base class`);
+  }
+};
+
+export const renderClassField = (
+  {
+    dependencies,
+    importsInTypesFile,
+    replaceMap,
+  }: FieldRenderOptions,
+  fields: string[],
+  field: ClassField,
+) => {
+  const fieldType = field.cursor.getType()!;
+  const size = fieldType.getSizeOf();
+  const align = fieldType.getAlignOf();
+  const sizeString = size >= 0 ? `, size ${size}` : "";
+  const alignString = align >= 0 ? `, align ${align}` : "";
+  const rawOffset = field.cursor.getOffsetOfField();
+  const offsetString = rawOffset >= 0 ? `, offset ${rawOffset / 8}` : "";
+  fields.push(
+    `${
+      renderTypeAsFfi(
+        dependencies,
+        importsInTypesFile,
+        field.type,
+        replaceMap,
+      )
+    }, // ${field.name}${offsetString}${sizeString}${alignString}`,
+  );
+};
+
 interface MethodRenderOptions {
   bindings: Set<string>;
   bufferEntryItems: string[];
@@ -845,12 +880,18 @@ const renderClassMethod = (
       asd.push(param.type.name);
       count++;
     } else if (
-      isInlineTemplateStruct(param.type) && !isPassableByValue(param.type) &&
-      param.type.specialization.usedAsBuffer &&
-      param.type.specialization.usedAsPointer
+      isInlineTemplateStruct(param.type) && !isPassableByValue(param.type)
     ) {
-      asd.push(param.type.name!);
-      count++;
+      if (!param.type.specialization) {
+        param.type.specialization = param.type.template.defaultSpecialization!;
+      }
+      if (
+        param.type.specialization.usedAsBuffer &&
+        param.type.specialization.usedAsPointer
+      ) {
+        asd.push(param.type.name!);
+        count++;
+      }
     }
   }
   if (count) {

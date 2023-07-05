@@ -253,6 +253,9 @@ const renderPointerAsFfi = (
       templateNameReplaceMap,
     ))})`;
   } else if (pointee.kind === "inline class<T>") {
+    if (!pointee.specialization) {
+      pointee.specialization = pointee.template.defaultSpecialization!;
+    }
     if (
       !pointee.specialization.usedAsBuffer &&
       pointee.specialization.usedAsPointer
@@ -466,6 +469,10 @@ export const renderTypeAsTS = (
         return nameBuffer;
       }
     } else if (isInlineTemplateStruct(type.pointee)) {
+      if (!type.pointee.specialization) {
+        type.pointee.specialization = type.pointee.template
+          .defaultSpecialization!;
+      }
       if (
         intoJS ||
         !type.pointee.specialization.usedAsBuffer &&

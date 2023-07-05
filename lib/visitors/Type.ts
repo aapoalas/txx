@@ -18,6 +18,7 @@ import {
   TypeEntry,
 } from "../types.d.ts";
 import {
+  getCursorFileLocation,
   getFileNameFromCursor,
   getNamespacedName,
   getPlainTypeInfo,
@@ -68,140 +69,7 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
     }
     return visitType(context, underlyingType);
   } else if (kind === CXTypeKind.CXType_Unexposed) {
-    const canonicalType = type.getCanonicalType();
-    if (canonicalType.kind !== CXTypeKind.CXType_Unexposed) {
-      return visitType(context, canonicalType);
-    }
-    const targc = type.getNumberOfTemplateArguments();
-    if (targc > 0) {
-      const templateDeclaration = type.getTypeDeclaration();
-      if (!templateDeclaration) {
-        throw new Error("Unexpected");
-      }
-      const templateName = templateDeclaration.getSpelling();
-      const templateNsName = getNamespacedName(templateDeclaration);
-      const templateKind = templateDeclaration.getTemplateKind();
-      if (templateKind === CXCursorKind.CXCursor_ClassDecl) {
-        const template: ClassTemplateEntry = {
-          cursor: templateDeclaration,
-          defaultSpecialization: {
-            application: [],
-            bases: [],
-            constructors: [],
-            cursor: canonicalType.getTypeDeclaration()!,
-            destructor: null,
-            fields: [],
-            kind: "partial class<T>",
-            methods: [],
-            parameters: [],
-            used: true,
-            usedAsBuffer: false,
-            usedAsPointer: false,
-            virtualBases: [],
-          },
-          file: getFileNameFromCursor(templateDeclaration),
-          kind: "class<T>",
-          name: templateName,
-          nsName: templateNsName,
-          parameters: [],
-          partialSpecializations: [],
-          used: true,
-        };
-        const parameters: (Parameter | TemplateParameter)[] = [];
-        for (let i = 0; i < targc; i++) {
-          const targ = type.getTemplateArgumentAsType(i);
-          if (!targ) {
-            throw new Error(
-              "Unexpectedly got no template argument for index",
-            );
-          }
-          template.parameters.push({
-            kind: "<T>",
-            name: targ.getSpelling(),
-            isSpread: targ.getTypeDeclaration()?.getPrettyPrinted()?.includes(
-              "...",
-            ) ?? false,
-            isRef: targ.getTypeDeclaration()?.getPrettyPrinted()?.includes(
-              " &",
-            ) ?? false,
-          });
-          const targType = visitType(context, targ);
-          if (!targType) {
-            throw new Error("Unexpected null template argument type");
-          } else if (
-            targType === "buffer" && targ.kind === CXTypeKind.CXType_Unexposed
-          ) {
-            parameters.push({
-              kind: "<T>",
-              name: targ.getSpelling(),
-              isSpread: targ.getTypeDeclaration()?.getPrettyPrinted()?.includes(
-                "...",
-              ) ?? false,
-              isRef: targ.getTypeDeclaration()?.getPrettyPrinted()?.includes(
-                " &",
-              ) ?? false,
-            });
-          } else {
-            parameters.push({
-              kind: "parameter",
-              comment: null,
-              name: targ.getSpelling(),
-              type: targType,
-            });
-          }
-        }
-        // this.#classTemplates.push(template);
-        // this.#useableEntries.push(template);
-        return {
-          cursor: template.cursor,
-          parameters,
-          template,
-          specialization: template.defaultSpecialization,
-          type,
-          kind: "inline class<T>",
-          name: template.name,
-          nsName: template.nsName,
-          file: template.file,
-        };
-      }
-    } else if (name.startsWith("type-parameter-")) {
-      const isSpread = name.endsWith("...");
-      let mutName = isSpread ? name.substring(0, name.length - 3) : name;
-      const isRvalueRef = mutName.endsWith(" &&");
-      const isLvalueRef = mutName.endsWith(" &");
-      if (isRvalueRef) {
-        mutName = mutName.substring(0, mutName.length - 3);
-      } else if (isLvalueRef) {
-        mutName = mutName.substring(0, mutName.length - 2);
-      }
-      return {
-        name: mutName,
-        kind: "<T>",
-        isSpread,
-        isRef: isLvalueRef || isRvalueRef,
-      } satisfies TemplateParameter;
-    }
-    const canonicalName = canonicalType.getSpelling();
-    if (canonicalName.startsWith("type-parameter-")) {
-      const isSpread = canonicalName.endsWith("...");
-      let mutName = isSpread
-        ? canonicalName.substring(0, canonicalName.length - 3)
-        : canonicalName;
-      const isRvalueRef = mutName.endsWith(" &&");
-      const isLvalueRef = mutName.endsWith(" &");
-      if (isRvalueRef) {
-        mutName = mutName.substring(0, mutName.length - 3);
-      } else if (isLvalueRef) {
-        mutName = mutName.substring(0, mutName.length - 2);
-      }
-      return {
-        name: mutName,
-        kind: "<T>",
-        isSpread,
-        isRef: isLvalueRef || isRvalueRef,
-      } satisfies TemplateParameter;
-    }
-    return "buffer";
+    return visitUnexposedType(context, type);
   } else if (kind === CXTypeKind.CXType_Elaborated) {
     return visitElaboratedType(context, type);
   } else if (
@@ -305,6 +173,10 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
         isInlineTemplateStruct(parameterType)
       ) {
         // Same goes for template instances.
+        if (!parameterType.specialization) {
+          parameterType.specialization = parameterType.template
+            .defaultSpecialization!;
+        }
         if (
           isPassableByValue(parameterType)
         ) {
@@ -317,6 +189,10 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
         if (isStruct(parameterType.pointee)) {
           parameterType.pointee.usedAsPointer = true;
         } else if (isInlineTemplateStruct(parameterType.pointee)) {
+          if (!parameterType.pointee.specialization) {
+            parameterType.pointee.specialization = parameterType.pointee
+              .template.defaultSpecialization!;
+          }
           parameterType.pointee.specialization.usedAsPointer = true;
         }
       }
@@ -342,11 +218,18 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
     } else if (isInlineTemplateStruct(result)) {
       // Same thing as above: One way or another the template
       // instance struct ends up as a buffer.
+      if (!result.specialization) {
+        result.specialization = result.template.defaultSpecialization!;
+      }
       result.specialization.usedAsBuffer = true;
     } else if (isPointer(result)) {
       if (isStruct(result.pointee)) {
         result.pointee.usedAsPointer = true;
       } else if (isInlineTemplateStruct(result.pointee)) {
+        if (!result.pointee.specialization) {
+          result.pointee.specialization = result.pointee.template
+            .defaultSpecialization!;
+        }
         result.pointee.specialization.usedAsPointer = true;
       }
     }
@@ -439,7 +322,7 @@ export const createInlineTypeEntry = (
     cursor: template.cursor,
     parameters,
     template,
-    specialization: getClassSpecializationByCursor(template, templateCursor),
+    specialization: getClassSpecializationByCursor(template, templateCursor)!,
     kind: "inline class<T>",
     name: template.name,
     nsName: template.nsName,
@@ -518,7 +401,7 @@ const visitRecordType = (
         specialization: getClassSpecializationByCursor(
           result,
           declaration.getSpecializedTemplate()!,
-        ),
+        ) || null,
         type,
         name: declaration.getSpelling(),
         nsName: getNamespacedName(declaration),
@@ -573,19 +456,135 @@ const visitElaboratedType = (
     return visitType(context, elaborated);
   }
 
-  const canonical = elaborated.getCanonicalType();
+  return visitUnexposedType(context, elaborated);
+};
 
-  if (canonical.kind !== CXTypeKind.CXType_Unexposed) {
-    return visitType(context, canonical);
+const visitUnexposedType = (context: Context, type: CXType) => {
+  const canonicalType = type.getCanonicalType();
+
+  if (canonicalType.kind !== CXTypeKind.CXType_Unexposed) {
+    return visitType(context, canonicalType);
   }
 
-  // Elaborated type points to an unexposed type kind: It's at least possible that this is a template
-  // instance of some kind.
-  const ttargc = elaborated.getNumberOfTemplateArguments();
+  // Unexposed types are often some kind of parameters.
+  const name = type.isConstQualifiedType()
+    ? type.getSpelling().substring(6)
+    : type.getSpelling();
+  const targc = type.getNumberOfTemplateArguments();
 
-  if (ttargc < 0) {
-    throw new Error("I have no idea what to do with this type");
+  if (targc < 0) {
+    if (name.startsWith("type-parameter-")) {
+      const isSpread = name.endsWith("...");
+      let mutName = isSpread ? name.substring(0, name.length - 3) : name;
+      const isRvalueRef = mutName.endsWith(" &&");
+      const isLvalueRef = mutName.endsWith(" &");
+      if (isRvalueRef) {
+        mutName = mutName.substring(0, mutName.length - 3);
+      } else if (isLvalueRef) {
+        mutName = mutName.substring(0, mutName.length - 2);
+      }
+      return {
+        name: mutName,
+        kind: "<T>",
+        isSpread,
+        isRef: isLvalueRef || isRvalueRef,
+      } satisfies TemplateParameter;
+    }
+    const canonicalName = canonicalType.getSpelling();
+    if (canonicalName.startsWith("type-parameter-")) {
+      const isSpread = canonicalName.endsWith("...");
+      let mutName = isSpread
+        ? canonicalName.substring(0, canonicalName.length - 3)
+        : canonicalName;
+      const isRvalueRef = mutName.endsWith(" &&");
+      const isLvalueRef = mutName.endsWith(" &");
+      if (isRvalueRef) {
+        mutName = mutName.substring(0, mutName.length - 3);
+      } else if (isLvalueRef) {
+        mutName = mutName.substring(0, mutName.length - 2);
+      }
+      return {
+        name: mutName,
+        kind: "<T>",
+        isSpread,
+        isRef: isLvalueRef || isRvalueRef,
+      } satisfies TemplateParameter;
+    }
+
+    throw new Error(
+      "Unexpected: Found unexposed non-template type that was is not a type parameter",
+    );
   }
 
+  const templateDeclaration = type.getTypeDeclaration();
+  if (!templateDeclaration) {
+    throw new Error(
+      "Could not find type declaration for elaborated template type",
+    );
+  }
+
+  if (templateDeclaration.kind === CXCursorKind.CXCursor_ClassTemplate) {
+    const classTemplateEntry = visitClassTemplateCursor(
+      context,
+      templateDeclaration,
+    );
+    const partialSpecialization = getClassSpecializationByCursor(
+      classTemplateEntry,
+      templateDeclaration,
+    );
+
+    if (!partialSpecialization) {
+      throw new Error("Could not determine partial specialization");
+    }
+
+    const parameters: (Parameter | TemplateParameter)[] = [];
+
+    for (let i = 0; i < targc; i++) {
+      const targ = type.getTemplateArgumentAsType(i);
+      if (!targ) {
+        throw new Error(
+          "Unexpectedly got no template argument for index",
+        );
+      }
+      const targType = visitType(context, targ);
+      if (!targType) {
+        throw new Error("Unexpected null template argument type");
+      } else if (
+        targType === "buffer" && targ.kind === CXTypeKind.CXType_Unexposed
+      ) {
+        parameters.push({
+          kind: "<T>",
+          name: targ.getSpelling(),
+          isSpread: targ.getTypeDeclaration()?.getPrettyPrinted()?.includes(
+            "...",
+          ) ?? false,
+          isRef: targ.getTypeDeclaration()?.getPrettyPrinted()?.includes(
+            " &",
+          ) ?? false,
+        });
+      } else {
+        parameters.push({
+          kind: "parameter",
+          comment: null,
+          name: targ.getSpelling(),
+          type: targType,
+        });
+      }
+    }
+
+    return {
+      cursor: partialSpecialization?.cursor || classTemplateEntry.cursor,
+      file: getFileNameFromCursor(
+        partialSpecialization?.cursor || classTemplateEntry.cursor,
+      ),
+      kind: "inline class<T>",
+      parameters,
+      specialization: partialSpecialization,
+      template: classTemplateEntry,
+      type,
+      name: partialSpecialization?.name || classTemplateEntry.name,
+      nsName: classTemplateEntry.nsName,
+    } satisfies InlineClassTemplateTypeEntry;
+  }
   throw new Error("ASD");
 };

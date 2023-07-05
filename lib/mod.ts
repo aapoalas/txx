@@ -82,6 +82,8 @@ export const build = (configuration: ExportConfiguration) => {
 
   gatherEntries(context, tuCursor);
 
+  context.entriesGathered();
+
   for (const importEntry of configuration.imports) {
     if (importEntry.kind === "class") {
       context.visitClass(importEntry);

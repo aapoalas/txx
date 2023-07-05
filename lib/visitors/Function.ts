@@ -52,6 +52,9 @@ export const visitFunctionCursor = (
       // Pass-by-value struct as a parameter only accepts Uint8Arrays in Deno.
       type.usedAsBuffer = true;
     } else if (isInlineTemplateStruct(type) && !isPassableByValue(type)) {
+      if (!type.specialization) {
+        type.specialization = type.template.defaultSpecialization!;
+      }
       type.specialization.usedAsBuffer = true;
     }
 
@@ -82,11 +85,18 @@ export const visitFunctionCursor = (
     } else if (isInlineTemplateStruct(result)) {
       // Same thing as above: One way or another the template
       // instance struct ends up as a buffer.
+      if (!result.specialization) {
+        result.specialization = result.template.defaultSpecialization!;
+      }
       result.specialization.usedAsBuffer = true;
     } else if (isPointer(result)) {
       if (isStruct(result.pointee)) {
         result.pointee.usedAsPointer = true;
       } else if (isInlineTemplateStruct(result.pointee)) {
+        if (!result.pointee.specialization) {
+          result.pointee.specialization = result.pointee.template
+            .defaultSpecialization!;
+        }
         result.pointee.specialization.usedAsPointer = true;
       }
     }

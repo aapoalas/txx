@@ -21,6 +21,7 @@ import {
   VarEntry,
 } from "./types.d.ts";
 import {
+  getCursorFileLocation,
   getCursorNameTemplatePart,
   getFileNameFromCursor,
   getNamespacedName,
@@ -34,7 +35,11 @@ import {
   isUnion,
 } from "./utils.ts";
 import { visitClassEntry } from "./visitors/Class.ts";
-import { visitClassTemplateEntry } from "./visitors/ClassTemplate.ts";
+import {
+  getClassSpecializationByCursor,
+  renameClassTemplateSpecializations,
+  visitClassTemplateEntry,
+} from "./visitors/ClassTemplate.ts";
 import { visitFunctionCursor } from "./visitors/Function.ts";
 import { visitTypedefEntry } from "./visitors/Typedef.ts";
 import { visitVarEntry } from "./visitors/Var.ts";
@@ -42,6 +47,8 @@ import { visitVarEntry } from "./visitors/Var.ts";
 export const SEP = "::";
 
 export class Context {
+  #classForwardDeclarations: CXCursor[] = [];
+  #classTemplateForwardDeclarations: CXCursor[] = [];
   #classes: ClassEntry[] = [];
   #classTemplates: ClassTemplateEntry[] = [];
   #enums: EnumEntry[] = [];
@@ -56,6 +63,18 @@ export class Context {
   addClass(cursor: CXCursor): void {
     if (!cursor.isDefinition()) {
       // Forward declaration
+      const definition = cursor.getDefinition();
+      if (definition && !definition.isNull()) {
+        // Class definition is found in this translation unit
+        const classEntry = this.#classes.find((entry) =>
+          entry.cursor.equals(definition)
+        );
+        if (classEntry) {
+          classEntry.forwardDeclarations.push(cursor);
+          return;
+        }
+      }
+      this.#classForwardDeclarations.push(cursor);
       return;
     }
     const name = cursor.getSpelling();
@@ -69,6 +88,21 @@ export class Context {
       ? `${this.#nsStack.join("::")}${SEP}${name}${nameTemplatePart}`
       : `${name}${nameTemplatePart}`;
 
+    const forwardDeclarations = this.#classForwardDeclarations.filter(
+      (declCursor) => {
+        const definition = declCursor.getDefinition();
+        return (definition && !definition.isNull() &&
+          definition.equals(cursor));
+      },
+    );
+
+    forwardDeclarations.forEach((declCursor) => {
+      this.#classForwardDeclarations.splice(
+        this.#classForwardDeclarations.indexOf(declCursor),
+        1,
+      );
+    });
+
     const entry = {
       bases: [],
       constructors: [],
@@ -76,6 +110,7 @@ export class Context {
       destructor: null,
       fields: [],
       file: getFileNameFromCursor(cursor),
+      forwardDeclarations,
       kind: "class",
       methods: [],
       name,
@@ -91,34 +126,51 @@ export class Context {
   }
 
   addClassTemplate(cursor: CXCursor): void {
+    if (!cursor.isDefinition()) {
+      // Forward declaration
+      const definition = cursor.getDefinition();
+      if (definition && !definition.isNull()) {
+        // Class definition is found in this translation unit
+        const classTemplateEntry = this.#classTemplates.find((entry) =>
+          entry.cursor.equals(definition)
+        );
+        if (classTemplateEntry) {
+          classTemplateEntry.forwardDeclarations.push(cursor);
+          return;
+        }
+      }
+      this.#classTemplateForwardDeclarations.push(cursor);
+      return;
+    }
     const name = cursor.getSpelling();
     if (!name) {
       // Anonymous struct
       return;
     }
 
+    const forwardDeclarations = this.#classTemplateForwardDeclarations.filter(
+      (declCursor) => {
+        const definition = declCursor.getDefinition();
+        return (definition && !definition.isNull() &&
+          definition.equals(cursor));
+      },
+    );
+
+    forwardDeclarations.forEach((declCursor) => {
+      this.#classTemplateForwardDeclarations.splice(
+        this.#classTemplateForwardDeclarations.indexOf(declCursor),
+        1,
+      );
+    });
+
     const nsName = this.#nsStack.length
       ? `${this.#nsStack.join("::")}${SEP}${name}`
       : name;
-    const defaultSpecialization: ClassTemplatePartialSpecialization = {
-      application: [],
-      bases: [],
-      constructors: [],
-      cursor,
-      destructor: null,
-      fields: [],
-      kind: "partial class<T>",
-      methods: [],
-      parameters: [],
-      used: false,
-      usedAsBuffer: false,
-      usedAsPointer: false,
-      virtualBases: [],
-    };
     const entry = {
       cursor,
-      defaultSpecialization,
+      defaultSpecialization: null,
       file: getFileNameFromCursor(cursor),
+      forwardDeclarations,
       kind: "class<T>",
       name,
       nsName,
@@ -135,15 +187,60 @@ export class Context {
     if (!spec) {
       throw new Error("Couldn't get specialized template cursor");
     }
-    const source = this.#classTemplates.find((entry) =>
+    let source = this.#classTemplates.find((entry) =>
       entry.cursor.equals(spec)
     );
     if (!source) {
+      const forwardDeclarationIndex = this.#classTemplateForwardDeclarations
+        .findIndex((declCursor) => declCursor.equals(spec));
+      if (forwardDeclarationIndex) {
+        this.#classTemplateForwardDeclarations.splice(
+          forwardDeclarationIndex,
+          1,
+        );
+        const name = spec.getSpelling();
+        const nsName = this.#nsStack.length
+          ? `${this.#nsStack.join("::")}${SEP}${name}`
+          : name;
+
+        const forwardDeclarations = this.#classTemplateForwardDeclarations
+          .filter((declCursor) => {
+            const definition = declCursor.getDefinition();
+            return (definition && !definition.isNull() &&
+              definition.equals(cursor));
+          });
+
+        forwardDeclarations.forEach((declCursor) => {
+          this.#classTemplateForwardDeclarations.splice(
+            this.#classTemplateForwardDeclarations.indexOf(declCursor),
+            1,
+          );
+        });
+
+        source = {
+          cursor: spec,
+          defaultSpecialization: null,
+          file: getFileNameFromCursor(spec),
+          forwardDeclarations,
+          kind: "class<T>",
+          name,
+          nsName,
+          parameters: [],
+          partialSpecializations: [],
+          used: false,
+        } satisfies ClassTemplateEntry;
+        this.#classTemplates.push(source);
+        this.#useableEntries.push(source);
+      }
+    }
+    if (!source) {
+      console.log(spec.getPrettyPrinted(), getCursorFileLocation(spec));
       throw new Error(
         `Could not find class template for ${getNamespacedName(cursor)}`,
       );
     }
     source.partialSpecializations.push({
+      name: `${source.name}_${source.partialSpecializations.length}`,
       application: [],
       bases: [],
       constructors: [],
@@ -299,6 +396,46 @@ export class Context {
     this.#useableEntries.push(entry);
   }
 
+  entriesGathered(): void {
+    let cursor: undefined | CXCursor;
+    while ((cursor = this.#classTemplateForwardDeclarations.shift())) {
+      const name = cursor.getSpelling();
+      const nsName = this.#nsStack.length
+        ? `${this.#nsStack.join("::")}${SEP}${name}`
+        : name;
+
+      const forwardDeclarations = this.#classTemplateForwardDeclarations.filter(
+        (declCursor) => {
+          const definition = declCursor.getDefinition();
+          return (definition && !definition.isNull() &&
+            definition.equals(cursor!));
+        },
+      );
+
+      forwardDeclarations.forEach((declCursor) => {
+        this.#classTemplateForwardDeclarations.splice(
+          this.#classTemplateForwardDeclarations.indexOf(declCursor),
+          1,
+        );
+      });
+
+      const entry = {
+        cursor,
+        defaultSpecialization: null,
+        file: getFileNameFromCursor(cursor),
+        forwardDeclarations,
+        kind: "class<T>",
+        name,
+        nsName,
+        parameters: [],
+        partialSpecializations: [],
+        used: false,
+      } satisfies ClassTemplateEntry;
+      this.#classTemplates.push(entry);
+      this.#useableEntries.push(entry);
+    }
+  }
+
   visitClass(importEntry: ClassContent): void {
     const classEntry = this.findClassByName(importEntry.name);
     if (classEntry) {
@@ -322,13 +459,23 @@ export class Context {
     cursor: CXCursor,
     importEntry?: ClassContent,
   ): ClassEntry | ClassTemplateEntry | TypedefEntry {
+    if (!cursor.isDefinition()) {
+      const definition = cursor.getDefinition();
+      if (definition && !definition.isNull()) {
+        cursor = definition;
+      }
+    }
     const classEntry = this.findClassByCursor(cursor);
     if (classEntry) {
       return visitClassEntry(this, classEntry, importEntry);
     }
     const classTemplateEntry = this.findClassTemplateByCursor(cursor);
     if (classTemplateEntry) {
-      return visitClassTemplateEntry(this, classTemplateEntry);
+      return visitClassTemplateEntry(
+        this,
+        classTemplateEntry,
+        getClassSpecializationByCursor(classTemplateEntry, cursor),
+      );
     }
     const typedefEntry = this.findTypedefByCursor(cursor);
     if (typedefEntry) {
@@ -395,7 +542,10 @@ export class Context {
   }
 
   findClassByCursor(cursor: CXCursor) {
-    return this.#classes.find((entry) => entry.cursor.equals(cursor));
+    return this.#classes.find((entry) =>
+      entry.cursor.equals(cursor) ||
+      entry.forwardDeclarations.some((decl) => decl.equals(cursor))
+    );
   }
 
   findClassByName(name: string) {
@@ -428,7 +578,8 @@ export class Context {
   findClassTemplateByCursor(cursor: CXCursor) {
     return this.#classTemplates.find((entry) =>
       entry.cursor.equals(cursor) ||
-      entry.partialSpecializations.some((spec) => spec.cursor.equals(cursor))
+      entry.partialSpecializations.some((spec) => spec.cursor.equals(cursor)) ||
+      entry.forwardDeclarations.some((decl) => decl.equals(cursor))
     );
   }
 
@@ -559,6 +710,9 @@ export class Context {
       const fileEntries = map.get(entry.file) ||
         map.set(entry.file, []).get(entry.file)!;
 
+      if (entry.kind === "class<T>") {
+        renameClassTemplateSpecializations(entry);
+      }
       if (entry.kind === "class" || entry.kind === "class<T>") {
         replaceSelfReferentialFieldValues(entry);
       }
@@ -603,6 +757,9 @@ const replaceSelfReferentialFieldValues = (
       entry.parameters.forEach((param) =>
         param.kind === "parameter" ? visitorCallback(param.type) : null
       );
+      if (!entry.specialization) {
+        entry.specialization = entry.template.defaultSpecialization!;
+      }
       entry.specialization.fields.forEach((field) =>
         visitorCallback(field.type)
       );
@@ -614,7 +771,9 @@ const replaceSelfReferentialFieldValues = (
   if (source.kind === "class") {
     source.fields.forEach(cb);
   } else {
-    source.defaultSpecialization.fields.forEach(cb);
+    if (source.defaultSpecialization) {
+      source.defaultSpecialization.fields.forEach(cb);
+    }
     source.partialSpecializations.forEach((spec) => spec.fields.forEach(cb));
   }
 };

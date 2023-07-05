@@ -42,13 +42,40 @@ export const getClassSpecializationByCursor = (
   entry: ClassTemplateEntry,
   cursor: CXCursor,
 ) => {
-  if (entry.defaultSpecialization.cursor.equals(cursor)) {
-    return entry.defaultSpecialization;
-  }
   const specialization = entry.partialSpecializations.find((spec) =>
     spec.cursor.equals(cursor)
   );
+  if (specialization) {
+    return specialization;
+  }
+  if (entry.cursor.equals(cursor) && entry.defaultSpecialization) {
+    return entry.defaultSpecialization;
+  } else if (
+    entry.defaultSpecialization &&
+    entry.defaultSpecialization.cursor.equals(cursor)
+  ) {
+    return entry.defaultSpecialization;
+  }
   if (!specialization) {
+    if (
+      entry.cursor.isDefinition() && entry.partialSpecializations.length === 0
+    ) {
+      // Only default specialization is available: It must be what we should match.
+      return entry.defaultSpecialization ?? undefined;
+    } else if (
+      !entry.cursor.isDefinition() && entry.partialSpecializations.length === 1
+    ) {
+      // Only one partial specialization is available: We should probably use it.
+      return entry.partialSpecializations[0];
+    } else if (
+      !entry.cursor.isDefinition() && entry.partialSpecializations.length === 0
+    ) {
+      // No definitions available. Ignore.
+      return;
+    } else if (entry.cursor.equals(cursor)) {
+      // We match the default specialization which doesn't exist.
+      return entry.defaultSpecialization ?? undefined;
+    }
     throw new Error("Could not find matching specialization");
   }
   return specialization;
@@ -59,28 +86,66 @@ export const visitClassTemplateEntry = (
   classTemplateEntry: ClassTemplateEntry,
   partialSpecialization?: ClassTemplatePartialSpecialization,
 ): ClassTemplateEntry => {
+  if (!classTemplateEntry.used) {
+    if (classTemplateEntry.name === "SharedPointer") {
+      console.log("HERE");
+    }
+    classTemplateEntry.used = true;
+    classTemplateEntry.cursor.visitChildren((gc) => {
+      if (
+        gc.kind === CXCursorKind.CXCursor_TemplateTypeParameter
+      ) {
+        classTemplateEntry.parameters.push({
+          kind: "<T>",
+          name: gc.getSpelling().replace("...", "").replace(" &&", "")
+            .replace(
+              " &",
+              "",
+            ),
+          isSpread: gc.getSpelling().includes("..."),
+          isRef: gc.getSpelling().includes(" &"),
+        });
+      } else if (
+        gc.kind === CXCursorKind.CXCursor_TemplateTemplateParameter
+      ) {
+        throw new Error(
+          `Encountered template template parameter '${gc.getSpelling()} in class template '${classTemplateEntry.nsName}''`,
+        );
+      }
+      return CXChildVisitResult.CXChildVisit_Continue;
+    });
+  }
+
+  if (!partialSpecialization) {
+    visitClassTemplateDefaultSpecialization(context, classTemplateEntry);
+  } else {
+    visitClassTemplateSpecialization(
+      context,
+      classTemplateEntry,
+      partialSpecialization,
+    );
+  }
+
+  return classTemplateEntry;
+};
+
+const visitClassTemplateDefaultSpecialization = (
+  context: Context,
+  classTemplateEntry: ClassTemplateEntry,
+) => {
   if (
-    !partialSpecialization &&
-    classTemplateEntry.partialSpecializations.length === 1
+    classTemplateEntry.defaultSpecialization ||
+    !classTemplateEntry.cursor.isDefinition()
   ) {
-    partialSpecialization = classTemplateEntry.partialSpecializations[0];
+    return;
   }
 
-  const doVisit = !classTemplateEntry.used;
-
-  if (partialSpecialization) {
-    partialSpecialization.used = true;
-  }
-
-  if (
-    !doVisit
-  ) {
-    return classTemplateEntry;
-  }
-
-  classTemplateEntry.used = true;
-
-  const defaultSpecialization = classTemplateEntry.defaultSpecialization;
+  const defaultSpecialization = createDefaultSpecialization(
+    classTemplateEntry.name,
+    classTemplateEntry.cursor,
+  );
+  classTemplateEntry.defaultSpecialization = defaultSpecialization;
+  defaultSpecialization.used = true;
 
   classTemplateEntry.cursor.visitChildren(
     (gc: CXCursor): CXChildVisitResult => {
@@ -177,10 +242,11 @@ export const visitClassTemplateEntry = (
       ) {
         defaultSpecialization.parameters.push({
           kind: "<T>",
-          name: gc.getSpelling().replace("...", "").replace(" &&", "").replace(
-            " &",
-            "",
-          ),
+          name: gc.getSpelling().replace("...", "").replace(" &&", "")
+            .replace(
+              " &",
+              "",
+            ),
           isSpread: gc.getSpelling().includes("..."),
           isRef: gc.getSpelling().includes(" &"),
         });
@@ -194,106 +260,109 @@ export const visitClassTemplateEntry = (
       return CXChildVisitResult.CXChildVisit_Continue;
     },
   );
+};
 
-  // Default specialization and class template itself take the same parameters.
-  classTemplateEntry.parameters.push(...defaultSpecialization.parameters);
-
-  classTemplateEntry.partialSpecializations.forEach((spec) => {
-    spec.cursor.visitChildren((gc) => {
-      if (
-        gc.kind === CXCursorKind.CXCursor_CXXBaseSpecifier
-      ) {
-        try {
-          const { isVirtualBase, baseClass } = visitBaseClass(context, gc);
-          if (isVirtualBase) {
-            spec.virtualBases.push(baseClass);
-          } else {
-            spec.bases.push(baseClass);
-          }
-        } catch (err) {
-          const baseError = new Error(
-            `Failed to visit base class '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
-          );
-          baseError.cause = err;
-          throw baseError;
+const visitClassTemplateSpecialization = (
+  context: Context,
+  classTemplateEntry: ClassTemplateEntry,
+  spec: ClassTemplatePartialSpecialization,
+) => {
+  if (spec.used) {
+    return;
+  }
+  spec.used = true;
+  spec.cursor.visitChildren((gc) => {
+    if (
+      gc.kind === CXCursorKind.CXCursor_CXXBaseSpecifier
+    ) {
+      try {
+        const { isVirtualBase, baseClass } = visitBaseClass(context, gc);
+        if (isVirtualBase) {
+          spec.virtualBases.push(baseClass);
+        } else {
+          spec.bases.push(baseClass);
         }
-      } else if (
-        gc.kind === CXCursorKind.CXCursor_FieldDecl
-      ) {
-        const type = gc.getType();
-        if (!type) {
-          throw new Error(
-            `Could not get type for class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
-          );
-        }
-        let field: TypeEntry | null;
-        try {
-          const found = context.findTypedefByType(type);
-          if (found) {
-            field = visitType(context, type);
-          } else {
-            field = createInlineTypeEntry(context, type);
-          }
-        } catch (err) {
-          // const access = gc.getCXXAccessSpecifier();
-          // if (
-          //   access === CX_CXXAccessSpecifier.CX_CXXPrivate ||
-          //   access === CX_CXXAccessSpecifier.CX_CXXProtected
-          // ) {
-          //   // Failure to accurately describe a private or protected field is not an issue.
-          //   field = "buffer";
-          // } else {
-          const newError = new Error(
-            `Failed to visit class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
-          );
-          newError.cause = err;
-          throw newError;
-          // }
-        }
-        if (field === null) {
-          throw new Error(
-            `Found void class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
-          );
-        }
-        if (typeof field === "object" && "used" in field) {
-          field.used = true;
-        }
-        spec.fields.push({
-          cursor: gc,
-          name: gc.getSpelling(),
-          type: field,
-        });
-      } else if (
-        gc.kind === CXCursorKind.CXCursor_TemplateTypeParameter
-      ) {
-        spec.parameters.push({
-          kind: "<T>",
-          name: gc.getSpelling(),
-          isSpread: gc.getPrettyPrinted().includes("typename ..."),
-          isRef: gc.getPrettyPrinted().includes(" &"),
-        });
-      } else if (
-        gc.kind === CXCursorKind.CXCursor_TemplateTemplateParameter
-      ) {
+      } catch (err) {
+        const baseError = new Error(
+          `Failed to visit base class '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
+        );
+        baseError.cause = err;
+        throw baseError;
+      }
+    } else if (
+      gc.kind === CXCursorKind.CXCursor_FieldDecl
+    ) {
+      const type = gc.getType();
+      if (!type) {
         throw new Error(
-          `Encountered template template parameter '${gc.getSpelling()} in class template '${classTemplateEntry.nsName}''`,
+          `Could not get type for class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
         );
       }
-      return CXChildVisitResult.CXChildVisit_Continue;
-    });
-
-    const specType = spec.cursor.getType()!;
-    const targc = specType.getNumberOfTemplateArguments();
-    for (let i = 0; i < targc; i++) {
-      const targType = visitType(
-        context,
-        specType.getTemplateArgumentAsType(i)!,
+      let field: TypeEntry | null;
+      try {
+        const found = context.findTypedefByType(type);
+        if (found) {
+          field = visitType(context, type);
+        } else {
+          field = createInlineTypeEntry(context, type);
+        }
+      } catch (err) {
+        // const access = gc.getCXXAccessSpecifier();
+        // if (
+        //   access === CX_CXXAccessSpecifier.CX_CXXPrivate ||
+        //   access === CX_CXXAccessSpecifier.CX_CXXProtected
+        // ) {
+        //   // Failure to accurately describe a private or protected field is not an issue.
+        //   field = "buffer";
+        // } else {
+        const newError = new Error(
+          `Failed to visit class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
+        );
+        newError.cause = err;
+        throw newError;
+        // }
+      }
+      if (field === null) {
+        throw new Error(
+          `Found void class field '${gc.getSpelling()}' of class '${classTemplateEntry.name}'`,
+        );
+      }
+      if (typeof field === "object" && "used" in field) {
+        field.used = true;
+      }
+      spec.fields.push({
+        cursor: gc,
+        name: gc.getSpelling(),
+        type: field,
+      });
+    } else if (
+      gc.kind === CXCursorKind.CXCursor_TemplateTypeParameter
+    ) {
+      spec.parameters.push({
+        kind: "<T>",
+        name: gc.getSpelling(),
+        isSpread: gc.getPrettyPrinted().includes("typename ..."),
+        isRef: gc.getPrettyPrinted().includes(" &"),
+      });
+    } else if (
+      gc.kind === CXCursorKind.CXCursor_TemplateTemplateParameter
+    ) {
+      throw new Error(
+        `Encountered template template parameter '${gc.getSpelling()} in class template '${classTemplateEntry.nsName}''`,
       );
-      spec.application.push(targType!);
     }
+    return CXChildVisitResult.CXChildVisit_Continue;
   });
 
-  return classTemplateEntry;
+  const specType = spec.cursor.getType()!;
+  const targc = specType.getNumberOfTemplateArguments();
+  for (let i = 0; i < targc; i++) {
+    const targType = visitType(
+      context,
+      specType.getTemplateArgumentAsType(i)!,
+    );
+    spec.application.push(targType!);
+  }
 };
 
 export const visitClassTemplateInstance = (
@@ -348,7 +417,7 @@ export const visitClassTemplateInstance = (
       name: found.name,
       nsName: found.nsName,
       parameters: appliedParameters,
-      specialization: getClassSpecializationByCursor(found, instance),
+      specialization: getClassSpecializationByCursor(found, instance)!,
       template: found,
       type: ttype,
     };
@@ -372,11 +441,54 @@ export const visitClassTemplateInstance = (
       name: found.name,
       nsName: found.nsName,
       parameters: appliedParameters,
-      specialization: getClassSpecializationByCursor(found, instance),
+      specialization: getClassSpecializationByCursor(found, instance)!,
       template: found,
       type: ttype,
     };
   } else {
     throw new Error("Wrooong");
   }
+};
+
+const createDefaultSpecialization = (
+  name: string,
+  cursor: CXCursor,
+): ClassTemplatePartialSpecialization => ({
+  name,
+  application: [],
+  bases: [],
+  constructors: [],
+  cursor,
+  destructor: null,
+  fields: [],
+  kind: "partial class<T>",
+  methods: [],
+  parameters: [],
+  used: false,
+  usedAsBuffer: false,
+  usedAsPointer: false,
+  virtualBases: [],
+});
+
+export const renameClassTemplateSpecializations = (
+  entry: ClassTemplateEntry,
+) => {
+  // Don't bother working with partial specializations that are never used.
+  const usedSpecializations = entry.partialSpecializations.filter((spec) =>
+    spec.used
+  );
+  if (!entry.defaultSpecialization?.used) {
+    // No default specialization: This template is governed by partial specializations.
+    if (usedSpecializations.length === 0) {
+      // A used ClassTemplateEntry should have at least one used specialization somewhere.
+      throw new Error("Unreachable");
+    } else if (usedSpecializations.length === 1) {
+      // If only one partial specialization is used then it can use the template name directly.
+      usedSpecializations[0].name = entry.name;
+      return;
+    }
+  }
+  usedSpecializations.forEach((spec) => {
+    spec.name = `${entry.name}${spec.parameters.map((x) => x.name).join("")}`;
+  });
 };

@@ -373,6 +373,15 @@ export const visitBaseClass = (
         throw new Error("Missing template argument kind handling");
       }
     }
+    const specialization = getClassSpecializationByCursor(
+      baseClass,
+      definition.kind === CXCursorKind.CXCursor_StructDecl
+        ? definition.getSpecializedTemplate()!
+        : definition,
+    );
+    if (!specialization) {
+      throw new Error("Could not find specialization");
+    }
     return {
       baseClass: {
         cursor: definition,
@@ -380,12 +389,7 @@ export const visitBaseClass = (
         kind: "inline class<T>",
         parameters,
         template: baseClass,
-        specialization: getClassSpecializationByCursor(
-          baseClass,
-          definition.kind === CXCursorKind.CXCursor_StructDecl
-            ? definition.getSpecializedTemplate()!
-            : definition,
-        ),
+        specialization,
         type,
         name: definition.getSpelling(),
         nsName: getNamespacedName(definition),
