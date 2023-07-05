@@ -83,17 +83,24 @@ export const renderClass = ({
 
   for (const base of entry.bases) {
     const BaseT = `${base.name}T`;
-    const BasePointer = `${base.name}Pointer`;
     if (fields.length === 0) {
+      // Pointer to class with inheritance is only usable
+      // as the base class if the base class
+      // is the very first field in the inheriting class
+      // and thus holds the vtable pointer.
+      const BasePointer = `${base.name}Pointer`;
       inheritedPointers.push(BasePointer);
+      if (base.kind === "inline class<T>") {
+        importsInTypesFile.set(BasePointer, typesFile(base.template.file));
+      } else {
+        importsInTypesFile.set(BasePointer, typesFile(base.file));
+      }
     }
     let baseType: CXType;
     if (base.kind === "inline class<T>") {
-      importsInTypesFile.set(BasePointer, typesFile(base.template.file));
       importsInTypesFile.set(BaseT, typesFile(base.template.file));
       baseType = base.template.cursor.getType()!;
     } else {
-      importsInTypesFile.set(BasePointer, typesFile(base.file));
       importsInTypesFile.set(BaseT, typesFile(base.file));
       baseType = base.cursor.getType()!;
     }
@@ -120,11 +127,15 @@ export const renderClass = ({
 
   for (const base of entry.virtualBases) {
     const BaseT = `${base.name}T`;
-    const BasePointer = `${base.name}Pointer`;
     if (fields.length === 0) {
+      // Pointer to class with inheritance is only usable
+      // as the base class if the base class
+      // is the very first field in the inheriting class
+      // and thus holds the vtable pointer.
+      const BasePointer = `${base.name}Pointer`;
       inheritedPointers.push(BasePointer);
+      importsInTypesFile.set(BasePointer, typesFile(base.file));
     }
-    importsInTypesFile.set(BasePointer, typesFile(base.file));
     importsInTypesFile.set(BaseT, typesFile(base.file));
 
     const baseType = base.cursor.getType()!;

@@ -104,7 +104,6 @@ const renderSpecialization = (
   const fields: string[] = [];
   for (const base of specialization.bases) {
     const BaseT = `${base.name}T`;
-    const BasePointer = `${base.name}Pointer`;
     let baseType: CXType | null;
     let baseTypeSource: AbsoluteTypesFilePath;
     if (base.kind === "inline class<T>") {
@@ -118,8 +117,15 @@ const renderSpecialization = (
       // Zero-sized base type; this just provides eg. methods.
       continue;
     }
-    inheritedPointers.push(BasePointer);
-    importsInTypesFile.set(BasePointer, baseTypeSource);
+    if (fields.length === 0) {
+      // Pointer to class with inheritance is only usable
+      // as the base class if the base class
+      // is the very first field in the inheriting class
+      // and thus holds the vtable pointer.
+      const BasePointer = `${base.name}Pointer`;
+      inheritedPointers.push(BasePointer);
+      importsInTypesFile.set(BasePointer, baseTypeSource);
+    }
     importsInTypesFile.set(BaseT, baseTypeSource);
 
     const size = baseType.getSizeOf();
@@ -152,7 +158,6 @@ const renderSpecialization = (
 
   for (const base of specialization.virtualBases) {
     const BaseT = `${base.name}T`;
-    const BasePointer = `${base.name}Pointer`;
     let baseType: CXType | null;
     let baseTypeSource: AbsoluteTypesFilePath;
     if (base.kind === "inline class<T>") {
@@ -166,8 +171,15 @@ const renderSpecialization = (
       // Zero-sized base type; this just provides eg. methods.
       continue;
     }
-    inheritedPointers.push(BasePointer);
-    importsInTypesFile.set(BasePointer, baseTypeSource);
+    if (fields.length === 0) {
+      // Pointer to class with inheritance is only usable
+      // as the base class if the base class
+      // is the very first field in the inheriting class
+      // and thus holds the vtable pointer.
+      const BasePointer = `${base.name}Pointer`;
+      inheritedPointers.push(BasePointer);
+      importsInTypesFile.set(BasePointer, baseTypeSource);
+    }
     importsInTypesFile.set(BaseT, baseTypeSource);
 
     const size = baseType.getSizeOf();
@@ -195,7 +207,8 @@ const renderSpecialization = (
       replaceMap,
     )
   }
-  return { struct: [${fields.join("\n")}
+  return { struct: [
+  ${fields.join("\n")}
 ] };
 }`;
 };
