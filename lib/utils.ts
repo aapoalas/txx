@@ -140,7 +140,9 @@ export const getPlainTypeInfo = (
   }
 };
 
-export const isPassedInRegisters = (entry: TypeEntry): boolean => {
+export const isPassableByValue = (
+  entry: "self" | null | TypeEntry,
+): boolean => {
   if (typeof entry === "string" || entry === null) {
     return true;
   }

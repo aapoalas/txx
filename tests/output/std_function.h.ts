@@ -28,8 +28,8 @@ export const tryFunction = {
     ptr(PodClassT),
     OtherPodClassT,
     buf(OtherPodClassT),
-    NonPodClassT,
-    ptr(NonPodClassT),
+    buf(NonPodClassT),
+    buf(NonPodClassT),
   ],
   result: "void",
 } as const;

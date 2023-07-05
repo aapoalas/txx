@@ -26,7 +26,7 @@ import {
   createDummyRenderDataEntry,
   createRenderDataEntry,
   FFI,
-  isPassedInRegisters,
+  isPassableByValue,
   isPointer,
   isPointerToStructLike,
   isStruct,
@@ -35,7 +35,11 @@ import {
   SYSTEM_TYPES,
   typesFile,
 } from "../utils.ts";
-import { renderFunctionExport } from "./Function.ts";
+import {
+  renderFunctionExport,
+  renderFunctionParameter,
+  renderFunctionReturnType,
+} from "./Function.ts";
 import { renderTypeAsFfi, renderTypeAsTS } from "./Type.ts";
 
 export const renderClass = ({
@@ -226,7 +230,7 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
       method.manglings[1],
       [bufClassT].concat(
         method.parameters.map((param) =>
-          renderTypeAsFfi(dependencies, importsInBindingsFile, param.type)
+          renderFunctionParameter(dependencies, importsInBindingsFile, param)
         ),
       ),
       `"void"`,
@@ -235,10 +239,16 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
     bufferEntryItems.push(
       renderClassMethod(
         Constructor,
-        method.parameters.map((param): ClassParameterRenderData => ({
-          name: param.name,
-          type: renderTypeAsTS(dependencies, importsInClassesFile, param.type),
-        }))
+        method.parameters.map((param): ClassParameterRenderData => {
+          return ({
+            name: param.name,
+            type: renderTypeAsTS(
+              dependencies,
+              importsInClassesFile,
+              param.type,
+            ),
+          });
+        })
           .concat({ name: "self", defaultValue: `new ${ClassBuffer}()` }),
         ClassBuffer,
         [
@@ -327,114 +337,96 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
       ? createMethodOverloadName(method, overloads)
       : method.name;
     importsInClassesFile.set(`${lib__Class}__${methodName}`, FFI);
-    if (!method.cursor.isStatic()) {
+    const isStaticMethod = method.cursor.isStatic();
+    const returnByValue = isPassableByValue(method.result);
+    if (!isStaticMethod) {
       importsInBindingsFile.set(ClassT, typesFilePath);
     }
-    if (
-      method.result === null || typeof method.result === "string" ||
-      isPassedInRegisters(method.result)
-    ) {
-      const returnsStruct = isStructLike(method.result);
-      const returnTsType = renderTypeAsTS(
-        dependencies,
-        importsInClassesFile,
-        method.result,
-        {
-          typeOnly: !returnsStruct,
-          intoJS: true,
-        },
-      );
-      const callString = `${lib__Class}__${methodName}(${
-        (method.cursor.isStatic() ? [] : ["this"]).concat(
-          method.parameters.map((param) => param.name),
-        ).join(", ")
-      })`;
-      const maybeNullishString = isPointer(method.result) ? "null | " : "";
-      const typeAssertString = isPointerToStructLike(method.result)
-        ? ` as ${maybeNullishString}${returnTsType}`
-        : "";
-      const returnString = returnsStruct
-        ? `return new ${returnTsType}(${callString}.buffer);`
-        : `return ${callString}${typeAssertString};`;
-      bindings.add(`${lib__Class}__${methodName}`);
-      const methodBindingData = renderFunctionExport(
-        `${lib__Class}__${methodName}`,
-        method.mangling,
-        (method.cursor.isStatic() ? [] : [bufClassT]).concat(
-          method.parameters.map((x) =>
-            renderTypeAsFfi(dependencies, importsInBindingsFile, x.type)
-          ),
-        ),
-        renderTypeAsFfi(dependencies, importsInBindingsFile, method.result),
-      );
-      entriesInBindingsFile.push(createDummyRenderDataEntry(methodBindingData));
-      bufferEntryItems.push(renderClassMethod(
-        renameForbiddenMethods(methodName, method),
-        method.parameters.map((param): ClassParameterRenderData => ({
-          name: param.name,
-          type: renderTypeAsTS(dependencies, importsInClassesFile, param.type),
-        })),
-        `${maybeNullishString}${returnTsType}`,
-        [returnString],
-        {
-          overridden: method.cursor.getOverriddenCursors().length > 0,
-          static: method.cursor.isStatic(),
-        },
-      ));
-    } else {
-      // Non-POD return type: SysV ABI has a special sauce for these.
-      // TODO: There might be false positives here? POD is a bit more strict than SysV ABI.
-      importsInBindingsFile.set("buf", SYSTEM_TYPES);
-      const resultType = `buf(${
-        renderTypeAsFfi(dependencies, importsInBindingsFile, method.result)
-      })`;
-      const resultJsType = renderTypeAsTS(
-        dependencies,
-        importsInClassesFile,
-        method.result,
-        { typeOnly: false, intoJS: true },
-      );
-      bindings.add(`${lib__Class}__${methodName}`);
-      const parameterTypes = method.parameters.map((x) =>
-        renderTypeAsFfi(dependencies, importsInBindingsFile, x.type)
-      );
-      const methodBindingData = renderFunctionExport(
-        `${lib__Class}__${methodName}`,
-        method.mangling,
-        method.cursor.isStatic()
-          ? [resultType, ...parameterTypes]
-          : [resultType, ClassT, ...parameterTypes],
-        `"void"`,
-      );
-      entriesInBindingsFile.push(createDummyRenderDataEntry(methodBindingData));
-      bufferEntryItems.push(
-        renderClassMethod(
-          renameForbiddenMethods(methodName, method),
-          method.parameters.map((param): ClassParameterRenderData => ({
-            name: param.name,
-            type: renderTypeAsTS(
-              dependencies,
-              importsInClassesFile,
-              param.type,
-            ),
-          })).concat({ name: "result", defaultValue: `new ${resultJsType}()` }),
-          resultJsType,
-          [
-            `${lib__Class}__${methodName}(${
-              (method.cursor.isStatic() ? ["result"] : ["result", "this"])
-                .concat(
-                  method.parameters.map((param) => param.name),
-                ).join(", ")
-            });`,
-            "return result;",
-          ],
-          {
-            overridden: method.cursor.getOverriddenCursors().length > 0,
-            static: method.cursor.isStatic(),
-          },
-        ),
-      );
+    bindings.add(`${lib__Class}__${methodName}`);
+    const parameterNames = method.parameters.map((param) => param.name);
+    const parameterStrings = method.parameters.map((param) =>
+      renderFunctionParameter(dependencies, importsInBindingsFile, param)
+    );
+    const parameterTsTypes = method.parameters.map((
+      param,
+    ): ClassParameterRenderData => ({
+      name: param.name,
+      type: renderTypeAsTS(dependencies, importsInClassesFile, param.type),
+    }));
+    if (!isStaticMethod) {
+      // Instance methods pass this parameter.
+      parameterNames.unshift("this");
+      parameterStrings.unshift(bufClassT);
     }
+    const resultTsType = renderTypeAsTS(
+      dependencies,
+      importsInClassesFile,
+      method.result,
+      {
+        // If the return value is returned through a 0th buffer
+        // parameter then the result TS type is used as a constructor.
+        // Otherwise it is only used as a type.
+        typeOnly: !returnByValue,
+        intoJS: true,
+      },
+    );
+    const resultType = renderFunctionReturnType(
+      dependencies,
+      importsInBindingsFile,
+      method.result,
+      parameterStrings,
+    );
+    if (!returnByValue) {
+      // Result returned by 0th buffer parameter, named "result".
+      parameterNames.unshift("result");
+      parameterTsTypes.push({
+        name: "result",
+        defaultValue: `new ${resultTsType}()`,
+      });
+    }
+    const tsCallString = `${lib__Class}__${methodName}(${
+      parameterNames.join(", ")
+    })`;
+    const bodyLines: string[] = [];
+    if (returnByValue) {
+      // Return by value calls can call function and return directly.
+      if (isPointerToStructLike(method.result)) {
+        // Pointers to struct-like types have their own pointer types that
+        // extend `Deno.PointerObject`. We need to do our own maybe-null typing.
+        bodyLines.push(`return ${tsCallString} as null | ${resultTsType};`);
+      } else if (isStructLike(method.result)) {
+        // Struct-like types return Uint8Array. We want to take the buffer and
+        // change into the proper custom ClassBuffer type.
+        bodyLines.push(`return new ${resultTsType}(${tsCallString}.buffer);`);
+      } else {
+        // All other types are good as-it-is.
+        bodyLines.push(`return ${tsCallString};`);
+      }
+    } else {
+      // Return by ref calls call the function first with "result"
+      // as 0th parameter, then return the result.
+      bodyLines.push(`${tsCallString};`, "return result;");
+    }
+    const methodBindingString = renderFunctionExport(
+      `${lib__Class}__${methodName}`,
+      method.mangling,
+      parameterStrings,
+      resultType,
+    );
+    entriesInBindingsFile.push(createDummyRenderDataEntry(methodBindingString));
+    const classMethodString = renderClassMethod(
+      renameForbiddenMethods(methodName, method),
+      parameterTsTypes,
+      returnByValue && isPointerToStructLike(method.result)
+        ? `null | ${resultTsType}`
+        : resultTsType,
+      bodyLines,
+      {
+        overridden: method.cursor.getOverriddenCursors().length > 0,
+        static: isStaticMethod,
+      },
+    );
+    bufferEntryItems.push(classMethodString);
   }
   let BaseClass = "Uint8Array";
   if (entry.bases.length > 0) {

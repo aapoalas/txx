@@ -5,6 +5,7 @@ import {
   createSizedStruct,
   getSizeOfType,
   isFunction,
+  isPassableByValue,
   isPointer,
   isStructLike,
   SYSTEM_TYPES,
@@ -76,123 +77,12 @@ export const renderTypeAsFfi = (
 
     return nameT;
   } else if (type.kind === "pointer") {
-    if (typeof type.pointee === "string") {
-      importMap.set("buf", SYSTEM_TYPES);
-      if (type.pointee === "self") {
-        return `buf("self")`;
-      }
-      return `buf(${(renderTypeAsFfi(
-        dependencies,
-        importMap,
-        type.pointee,
-        templateNameReplaceMap,
-      ))})`;
-    }
-    if (type.pointee.kind === "inline class<T>") {
-      importMap.set("buf", SYSTEM_TYPES);
-      return `buf(${
-        renderTypeAsFfi(
-          dependencies,
-          importMap,
-          type.pointee,
-          templateNameReplaceMap,
-        )
-      })`;
-    } else if (
-      type.pointee.kind === "pointer" || type.pointee.kind === "class"
-    ) {
-      if (
-        type.pointee.kind === "class" && !type.pointee.usedAsBuffer &&
-        type.pointee.usedAsPointer
-      ) {
-        importMap.set("ptr", SYSTEM_TYPES);
-        return `ptr(${(renderTypeAsFfi(
-          dependencies,
-          importMap,
-          type.pointee,
-          templateNameReplaceMap,
-        ))})`;
-      }
-      importMap.set("buf", SYSTEM_TYPES);
-      return `buf(${(renderTypeAsFfi(
-        dependencies,
-        importMap,
-        type.pointee,
-        templateNameReplaceMap,
-      ))})`;
-    } else if (type.pointee.kind === "function" || type.pointee.kind === "fn") {
-      // Function pointer is just a function.
-      return `func(${
-        renderTypeAsFfi(
-          dependencies,
-          importMap,
-          type.pointee,
-          templateNameReplaceMap,
-        )
-      })`;
-    } else if (type.pointee.kind === "typedef") {
-      const isPODType = type.pointee.cursor.getType()!.isPODType();
-      if (isPODType) {
-        importMap.set("buf", SYSTEM_TYPES);
-      } else {
-        importMap.set("ptr", SYSTEM_TYPES);
-      }
-      return isPODType
-        ? `buf(${(renderTypeAsFfi(
-          dependencies,
-          importMap,
-          type.pointee,
-          templateNameReplaceMap,
-        ))})`
-        : `ptr(${(renderTypeAsFfi(
-          dependencies,
-          importMap,
-          type.pointee,
-          templateNameReplaceMap,
-        ))})`;
-    } else if (type.pointee.kind === "enum") {
-      importMap.set("buf", SYSTEM_TYPES);
-      return `buf(${(renderTypeAsFfi(
-        dependencies,
-        importMap,
-        type.pointee,
-        templateNameReplaceMap,
-      ))})`;
-    } else if (
-      type.pointee.kind === "inline class" || type.pointee.kind === "[N]"
-    ) {
-      if (type.pointee.type.isPODType()) {
-        return renderTypeAsFfi(
-          dependencies,
-          importMap,
-          "pointer",
-          templateNameReplaceMap,
-        );
-      } else {
-        return renderTypeAsFfi(
-          dependencies,
-          importMap,
-          "buffer",
-          templateNameReplaceMap,
-        );
-      }
-    } else if (isStructLike(type.pointee)) {
-      importMap.set("buf", SYSTEM_TYPES);
-      return `buf(${(renderTypeAsFfi(
-        dependencies,
-        importMap,
-        type.pointee,
-        templateNameReplaceMap,
-      ))})`;
-    } else {
-      importMap.set("ptr", SYSTEM_TYPES);
-      return `ptr(${(renderTypeAsFfi(
-        dependencies,
-        importMap,
-        type.pointee,
-        templateNameReplaceMap,
-      ))})`;
-    }
+    return renderPointerAsFfi(
+      dependencies,
+      importMap,
+      type.pointee,
+      templateNameReplaceMap,
+    );
   } else if (type.kind === "function" || type.kind === "fn") {
     const parametersStrings = type.parameters.map((param) =>
       renderTypeAsFfi(
@@ -330,6 +220,156 @@ export const renderTypeAsFfi = (
       // @ts-expect-error kind and name will exist in any added TypeEntry types
       "internal error: unknown type kind: " + type.kind + ": " + type.name,
     );
+  }
+};
+
+const renderPointerAsFfi = (
+  dependencies: Set<string>,
+  importMap: ImportMap,
+  pointee: "self" | TypeEntry,
+  templateNameReplaceMap = EMPTY_MAP,
+) => {
+  if (typeof pointee === "string") {
+    // Primitive value pointers are usually out pointers.
+    importMap.set("buf", SYSTEM_TYPES);
+    if (pointee === "self") {
+      return `buf("self")`;
+    }
+    return `buf(${(renderTypeAsFfi(
+      dependencies,
+      importMap,
+      pointee,
+      templateNameReplaceMap,
+    ))})`;
+  } else if (pointee.kind === "pointer") {
+    // Pointer to pointer is usually an out pointer.
+    importMap.set("buf", SYSTEM_TYPES);
+    return `buf(${(renderTypeAsFfi(
+      dependencies,
+      importMap,
+      pointee,
+      templateNameReplaceMap,
+    ))})`;
+  } else if (pointee.kind === "inline class<T>") {
+    if (
+      !pointee.specialization.usedAsBuffer &&
+      pointee.specialization.usedAsPointer
+    ) {
+      // Class template seen only as a pointer should use
+      // pointers as FFI interface type.
+      importMap.set("ptr", SYSTEM_TYPES);
+      return `ptr(${(renderTypeAsFfi(
+        dependencies,
+        importMap,
+        pointee,
+        templateNameReplaceMap,
+      ))})`;
+    }
+    importMap.set("buf", SYSTEM_TYPES);
+    return `buf(${
+      renderTypeAsFfi(
+        dependencies,
+        importMap,
+        pointee,
+        templateNameReplaceMap,
+      )
+    })`;
+  } else if (
+    pointee.kind === "class"
+  ) {
+    if (
+      !pointee.usedAsBuffer &&
+      pointee.usedAsPointer
+    ) {
+      // Class seen only as a pointer should use pointers as
+      // FFI interface type.
+      importMap.set("ptr", SYSTEM_TYPES);
+      return `ptr(${(renderTypeAsFfi(
+        dependencies,
+        importMap,
+        pointee,
+        templateNameReplaceMap,
+      ))})`;
+    }
+    importMap.set("buf", SYSTEM_TYPES);
+    return `buf(${(renderTypeAsFfi(
+      dependencies,
+      importMap,
+      pointee,
+      templateNameReplaceMap,
+    ))})`;
+  } else if (pointee.kind === "function" || pointee.kind === "fn") {
+    // Function pointer is just a function.
+    return `func(${
+      renderTypeAsFfi(
+        dependencies,
+        importMap,
+        pointee,
+        templateNameReplaceMap,
+      )
+    })`;
+  } else if (pointee.kind === "typedef") {
+    const passByValue = isPassableByValue(pointee);
+    if (passByValue) {
+      importMap.set("buf", SYSTEM_TYPES);
+    } else {
+      importMap.set("ptr", SYSTEM_TYPES);
+    }
+    return passByValue
+      ? `buf(${(renderTypeAsFfi(
+        dependencies,
+        importMap,
+        pointee,
+        templateNameReplaceMap,
+      ))})`
+      : `ptr(${(renderTypeAsFfi(
+        dependencies,
+        importMap,
+        pointee,
+        templateNameReplaceMap,
+      ))})`;
+  } else if (pointee.kind === "enum") {
+    importMap.set("buf", SYSTEM_TYPES);
+    return `buf(${(renderTypeAsFfi(
+      dependencies,
+      importMap,
+      pointee,
+      templateNameReplaceMap,
+    ))})`;
+  } else if (
+    pointee.kind === "inline class" || pointee.kind === "[N]"
+  ) {
+    if (isPassableByValue(pointee)) {
+      return renderTypeAsFfi(
+        dependencies,
+        importMap,
+        "pointer",
+        templateNameReplaceMap,
+      );
+    } else {
+      return renderTypeAsFfi(
+        dependencies,
+        importMap,
+        "buffer",
+        templateNameReplaceMap,
+      );
+    }
+  } else if (isStructLike(pointee)) {
+    importMap.set("buf", SYSTEM_TYPES);
+    return `buf(${(renderTypeAsFfi(
+      dependencies,
+      importMap,
+      pointee,
+      templateNameReplaceMap,
+    ))})`;
+  } else {
+    importMap.set("ptr", SYSTEM_TYPES);
+    return `ptr(${(renderTypeAsFfi(
+      dependencies,
+      importMap,
+      pointee,
+      templateNameReplaceMap,
+    ))})`;
   }
 };
 

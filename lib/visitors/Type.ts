@@ -22,7 +22,7 @@ import {
   getNamespacedName,
   getPlainTypeInfo,
   isInlineTemplateStruct,
-  isPassedInRegisters,
+  isPassableByValue,
   isPointer,
   isStruct,
 } from "../utils.ts";
@@ -288,12 +288,12 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
         throw new Error("Failed to visit parameter type");
       }
 
-      if (isStruct(parameterType) && isPassedInRegisters(parameterType)) {
+      if (isStruct(parameterType) && isPassableByValue(parameterType)) {
         // POD structs get passed as "struct" type which only accepts Uint8Arrays in Deno.
         parameterType.usedAsBuffer = true;
       } else if (
         isInlineTemplateStruct(parameterType) &&
-        isPassedInRegisters(parameterType)
+        isPassableByValue(parameterType)
       ) {
         parameterType.specialization.usedAsBuffer = true;
       }

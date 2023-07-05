@@ -1,12 +1,9 @@
-import {
-  CXCursor,
-  CXType,
-} from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
+import { CXCursor } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
 import { Context } from "../Context.ts";
-import type { FunctionTypeEntry, Parameter, TypeEntry } from "../types.d.ts";
+import type { Parameter, TypeEntry } from "../types.d.ts";
 import {
   isInlineTemplateStruct,
-  isPassedInRegisters,
+  isPassableByValue,
   isPointer,
   isStruct,
 } from "../utils.ts";
@@ -51,10 +48,10 @@ export const visitFunctionCursor = (
       type.used = true;
     }
 
-    if (isStruct(type) && !isPassedInRegisters(type)) {
+    if (isStruct(type) && !isPassableByValue(type)) {
       // Pass-by-value struct as a parameter only accepts Uint8Arrays in Deno.
       type.usedAsBuffer = true;
-    } else if (isInlineTemplateStruct(type) && !isPassedInRegisters(type)) {
+    } else if (isInlineTemplateStruct(type) && !isPassableByValue(type)) {
       type.specialization.usedAsBuffer = true;
     }
 

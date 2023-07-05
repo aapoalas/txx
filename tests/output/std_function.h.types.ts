@@ -1,4 +1,4 @@
-import { buf, functionT, ptr } from "./systemTypes.ts";
+import { buf, functionT } from "./systemTypes.ts";
 
 export const NULLARY_CALLBACK_SIZE = 32 as const;
 export const NullaryCallbackT = functionT({ parameters: [], result: "void" });
@@ -85,7 +85,7 @@ export type NonPodClassPointer = NonNullable<Deno.PointerValue> & {
 };
 
 export const ClassCallbackT = {
-  parameters: [OtherPodClassT, NonPodClassT, ptr(NonPodClassT)],
+  parameters: [OtherPodClassT, NonPodClassT, buf(NonPodClassT)],
   result: "void",
 } as const;
 declare const ClassCallback_: unique symbol;

@@ -54,27 +54,6 @@ export const enum _Manager_operation {
   __destroy_functor,
 }
 
-export const functionT = <const Signature>(
-  _Signature: Signature,
-) => {
-  if (isFunction(_Signature)) {
-    const { parameters: _ArgTypes, result: _Res } = _Signature;
-    return {
-      struct: [
-        _Function_baseT, // base class, size 24, align 8
-        func({
-          parameters: [ptr(_Any_dataT), ..._ArgTypes.map(ptr)],
-          result: _Res,
-        }), // _M_invoker
-      ],
-    };
-  } else {
-    throw new Error(
-      "Failed to build template class: No specialization matched",
-    );
-  }
-};
-
 export const _Manager_typeT = {
   parameters: [ptr(_Any_dataT), ptr(_Any_dataT), _Manager_operationT],
   result: "bool",
@@ -94,4 +73,25 @@ export const _Function_baseT = {
 declare const _Function_base: unique symbol;
 export type _Function_basePointer = NonNullable<Deno.PointerValue> & {
   [_Function_base]: unknown;
+};
+
+export const functionT = <const Signature>(
+  _Signature: Signature,
+) => {
+  if (isFunction(_Signature)) {
+    const { parameters: _ArgTypes, result: _Res } = _Signature;
+    return {
+      struct: [
+        _Function_baseT, // base class, size 24, align 8
+        func({
+          parameters: [ptr(_Any_dataT), ..._ArgTypes.map(ptr)],
+          result: _Res,
+        }), // _M_invoker
+      ],
+    } as const;
+  } else {
+    throw new Error(
+      "Failed to build template class: No specialization matched",
+    );
+  }
 };
