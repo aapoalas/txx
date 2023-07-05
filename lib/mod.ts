@@ -136,6 +136,9 @@ export const build = (configuration: ExportConfiguration) => {
   const entriesInSystemBindingsFile: RenderDataEntry[] = [];
   const entriesInSystemClassesFile: RenderDataEntry[] = [];
   const entriesInSystemTypesFile: RenderDataEntry[] = [];
+  const importsInSystemBindingsFile: ImportMap = new Map();
+  const importsInSystemClassesFile: ImportMap = new Map();
+  const importsInSystemTypesFile: ImportMap = new Map();
 
   for (const entry of entriesNeededInSystem) {
     const result = renderSystemFileConstant(entry);
@@ -150,6 +153,15 @@ export const build = (configuration: ExportConfiguration) => {
     entriesInSystemBindingsFile.push(...outsideFile.entriesInBindingsFile);
     entriesInSystemClassesFile.push(...outsideFile.entriesInClassesFile);
     entriesInSystemTypesFile.push(...outsideFile.entriesInTypesFile);
+    for (const [key, value] of outsideFile.importsInBindingsFile) {
+      importsInSystemBindingsFile.set(key, value);
+    }
+    for (const [key, value] of outsideFile.importsInClassesFile) {
+      importsInSystemClassesFile.set(key, value);
+    }
+    for (const [key, value] of outsideFile.importsInTypesFile) {
+      importsInSystemTypesFile.set(key, value);
+    }
   }
 
   sortRenderDataEntries(entriesInSystemClassesFile);
@@ -162,9 +174,9 @@ export const build = (configuration: ExportConfiguration) => {
     entriesInBindingsFile: entriesInSystemBindingsFile,
     entriesInClassesFile: entriesInSystemClassesFile,
     entriesInTypesFile: entriesInSystemTypesFile,
-    importsInBindingsFile: new Map(),
-    importsInClassesFile: new Map(),
-    importsInTypesFile: new Map(),
+    importsInBindingsFile: importsInSystemBindingsFile,
+    importsInClassesFile: importsInSystemClassesFile,
+    importsInTypesFile: importsInSystemTypesFile,
     typesFilePath: systemTypesFilePath,
   });
 
@@ -385,7 +397,8 @@ const writeFileData = (
       importPath = systemTypesFilePath;
     } else if (importPath === FFI) {
       importPath = `${basePath}/ffi.ts` as const;
-    } else if (importPath === filePath) {
+    }
+    if (importPath === filePath) {
       continue;
     }
     const importsList = importsInFileByFile.get(importPath) ||
