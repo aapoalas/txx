@@ -23,7 +23,11 @@ import {
   isTypedef,
   typesFile,
 } from "../utils.ts";
-import { renderTypeAsFfi, renderTypeAsTS } from "./Type.ts";
+import {
+  renderTypeAsFfi,
+  renderTypeAsFfiBindingTypes,
+  renderTypeAsTS,
+} from "./Type.ts";
 
 export const renderTypedef = (
   renderData: RenderData,
@@ -269,6 +273,10 @@ const renderInlineTemplateTarget = (
     importsInTypesFile,
     target,
   );
+  const targetName = target.name;
+  const targetPointer = `${targetName}Pointer`;
+  dependencies.add(targetPointer);
+  importsInTypesFile.set(`type ${targetPointer}`, typesFile(target.file));
   const typesEntry = createRenderDataEntry(
     [NAME_SIZE, nameT, namePointer],
     [...dependencies],
@@ -276,8 +284,17 @@ const renderInlineTemplateTarget = (
       target.cursor.getType()!.getSizeOf()
     } as const;
 export const ${nameT} = ${refT}${asConst};
-declare const ${name}: unique symbol;
-export type ${namePointer} = NonNullable<Deno.PointerValue> & { [${name}]: unknown };
+export type ${namePointer} = ${targetPointer}<${
+      target.parameters.map((param) =>
+        param.kind === "parameter"
+          ? renderTypeAsFfiBindingTypes(
+            dependencies,
+            importsInTypesFile,
+            param.type,
+          )
+          : param.name
+      ).join(", ")
+    }>;
 `,
   );
   entriesInTypesFile.push(typesEntry);

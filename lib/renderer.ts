@@ -124,12 +124,27 @@ export const renderSystemFileConstant = (constant: string): RenderDataEntry => {
       contents = `export const buf = (_: unknown) => "buffer" as const;
 `;
       break;
+    case "type Buf":
+      contents = `declare const BufBrand: unique symbol;
+export type Buf<T> = "buffer" & { [BufBrand]: T };
+`;
+      break;
     case "ptr":
       contents = `export const ptr = (_: unknown) => "pointer" as const;
 `;
       break;
+    case "type Ptr":
+      contents = `declare const PtrBrand: unique symbol;
+export type Ptr<T> = "pointer" & { [PtrBrand]: T };
+`;
+      break;
     case "func":
       contents = `export const func = (_?: unknown) => "function" as const;
+`;
+      break;
+    case "type Func":
+      contents = `declare const FuncBrand: unique symbol;
+export type Func<T> = "function" & { [FuncBrand]: T };
 `;
       break;
     case "union2":

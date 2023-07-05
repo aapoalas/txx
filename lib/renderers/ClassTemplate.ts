@@ -236,7 +236,7 @@ const generateApplicationParameters = (
       return {
         name,
         TypeName,
-        pointerExtends: "Function",
+        pointerExtends: "Deno.UnsafeCallbackDefinition",
         structExtends: "Deno.UnsafeCallbackDefinition",
         paramType: param,
         applicationType: applicationParam,
@@ -245,7 +245,7 @@ const generateApplicationParameters = (
       return {
         name,
         TypeName,
-        pointerExtends: "Deno.PointerValue",
+        pointerExtends: `"pointer"`,
         structExtends: `"pointer"`,
         paramType: param,
         applicationType: applicationParam,

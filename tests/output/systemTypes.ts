@@ -12,6 +12,9 @@ export const func = (_?: unknown) => "function" as const;
 
 export const buf = (_: unknown) => "buffer" as const;
 
+declare const BufBrand: unique symbol;
+export type Buf<T> = "buffer" & { [BufBrand]: T };
+
 export const _Nocopy_typesT = union3(
   { "struct": ["u64", "u64"] },
   "pointer",
@@ -71,7 +74,7 @@ export type _Function_basePointer = NonNullable<Deno.PointerValue> & {
 
 declare const functionTemplate: unique symbol;
 declare const function__Signature: unique symbol;
-export type functionPointer<Signature extends Function> =
+export type functionPointer<Signature extends Deno.UnsafeCallbackDefinition> =
   & _Function_basePointer
   & { [functionTemplate]: unknown; [function__Signature]: Signature };
 export const functionT = <

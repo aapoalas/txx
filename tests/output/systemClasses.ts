@@ -23,4 +23,5 @@ export class _Function_baseBuffer extends Uint8Array {
   }
 }
 
-export class functionBuffer<_Signature extends Function> extends Uint8Array {}
+export class functionBuffer<_Signature extends Deno.UnsafeCallbackDefinition>
+  extends Uint8Array {}
