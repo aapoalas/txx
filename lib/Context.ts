@@ -311,7 +311,7 @@ export class Context {
     }
     const typedefEntry = this.findTypedefByName(importEntry.name);
     if (typedefEntry) {
-      visitTypedefEntry(this, importEntry.name);
+      visitTypedefEntry(this, typedefEntry.cursor);
       return;
     }
     throw new Error(`Could not find class with name '${importEntry.name}'`);
@@ -331,7 +331,7 @@ export class Context {
     }
     const typedefEntry = this.findTypedefByCursor(cursor);
     if (typedefEntry) {
-      return visitTypedefEntry(this, typedefEntry.name);
+      return visitTypedefEntry(this, typedefEntry.cursor);
     }
     const hasChildren = cursor.visitChildren(() =>
       CXChildVisitResult.CXChildVisit_Break

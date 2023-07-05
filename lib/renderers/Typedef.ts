@@ -161,8 +161,8 @@ const renderTypedefTarget = (
   const targetName = target.name;
   const nameBuffer = `${name}Buffer`;
   const namePointer = `${name}Pointer`;
-  const targetBuffer = `${target}Buffer`;
-  const targetPointer = `${target}Pointer`;
+  const targetBuffer = `${targetName}Buffer`;
+  const targetPointer = `${targetName}Pointer`;
   const targetT = `${targetName}T`;
   if (isStructLike(target.target)) {
     importsInClassesFile.set(
@@ -207,8 +207,7 @@ export type ${namePointer} = ${targetPointer};
       createRenderDataEntry(
         [nameT, name],
         [targetT, targetName],
-        `
-export const ${nameT} = ${targetT};
+        `export const ${nameT} = ${targetT};
 export type ${name} = ${targetName};
 `,
       ),
@@ -265,19 +264,18 @@ const renderInlineTemplateTarget = (
   );
   const asConst = isInlineTemplateStruct(target) ? "" : " as const";
   const NAME_SIZE = `${constantCase(name)}_SIZE`;
+  const refT = renderTypeAsFfi(
+    dependencies,
+    importsInTypesFile,
+    target,
+  );
   const typesEntry = createRenderDataEntry(
     [NAME_SIZE, nameT, namePointer],
     [...dependencies],
     `export const ${NAME_SIZE} = ${
       target.cursor.getType()!.getSizeOf()
     } as const;
-export const ${nameT} = ${
-      renderTypeAsFfi(
-        dependencies,
-        importsInTypesFile,
-        target,
-      )
-    }${asConst};
+export const ${nameT} = ${refT}${asConst};
 declare const ${name}: unique symbol;
 export type ${namePointer} = NonNullable<Deno.PointerValue> & { [${name}]: unknown };
 `,
@@ -300,8 +298,8 @@ const renderStruct = (
   const targetName = target.name;
   const nameBuffer = `${name}Buffer`;
   const namePointer = `${name}Pointer`;
-  const targetBuffer = `${target}Buffer`;
-  const targetPointer = `${target}Pointer`;
+  const targetBuffer = `${targetName}Buffer`;
+  const targetPointer = `${targetName}Pointer`;
   const targetT = `${targetName}T`;
   importsInClassesFile.set(
     targetBuffer,

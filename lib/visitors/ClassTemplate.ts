@@ -11,7 +11,7 @@ import {
   TemplateParameter,
   TypeEntry,
 } from "../types.d.ts";
-import { getNamespacedName } from "../utils.ts";
+import { getCursorFileLocation, getNamespacedName } from "../utils.ts";
 import { visitBaseClass } from "./Class.ts";
 import { createInlineTypeEntry, visitType } from "./Type.ts";
 
@@ -49,6 +49,7 @@ export const getClassSpecializationByCursor = (
     spec.cursor.equals(cursor)
   );
   if (!specialization) {
+    return entry.defaultSpecialization;
     throw new Error("Could not find matching specialization");
   }
   return specialization;

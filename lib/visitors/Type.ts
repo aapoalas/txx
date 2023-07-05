@@ -43,7 +43,7 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
     ? type.getSpelling().substring(6)
     : type.getSpelling();
   if (kind === CXTypeKind.CXType_Typedef) {
-    return visitTypedefEntry(context, name);
+    return visitTypedefEntry(context, type.getTypeDeclaration()!);
   } else if (kind === CXTypeKind.CXType_Unexposed) {
     const canonicalType = type.getCanonicalType();
     if (canonicalType.kind !== CXTypeKind.CXType_Unexposed) {
@@ -421,6 +421,11 @@ const visitRecordType = (
       name: `targ_${i}`,
       type: targType,
     });
+  }
+
+  if (!declaration.getSpelling()) {
+    // Anonymous declarations are not saved.
+    return createInlineTypeEntry(context, type);
   }
 
   if (

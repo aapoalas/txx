@@ -106,6 +106,10 @@ export const renderClass = ({
       baseType = base.cursor.getType()!;
     }
 
+    if (!baseType) {
+      continue;
+    }
+
     const size = baseType.getSizeOf();
     const align = baseType.getAlignOf();
     fields.push(
@@ -413,7 +417,7 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
               importsInClassesFile,
               param.type,
             ),
-          })).concat({ name: "result", type: `new ${resultJsType}()` }),
+          })).concat({ name: "result", defaultValue: `new ${resultJsType}()` }),
           resultJsType,
           [
             `${lib__Class}__${methodName}(${

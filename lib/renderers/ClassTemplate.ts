@@ -7,7 +7,12 @@ import {
   ImportMap,
   RenderData,
 } from "../types.d.ts";
-import { createRenderDataEntry, SYSTEM_TYPES, typesFile } from "../utils.ts";
+import {
+  createRenderDataEntry,
+  isPointer,
+  SYSTEM_TYPES,
+  typesFile,
+} from "../utils.ts";
 import { renderTypeAsFfi } from "./Type.ts";
 
 export const renderClassTemplate = (
@@ -219,12 +224,20 @@ const generateTypeCheck = (
   entry: ClassTemplateEntry,
 ) => {
   if (
-    specialization.application.length === 1 &&
-    typeof specialization.application[0] === "object" &&
-    specialization.application[0].kind === "fn"
+    specialization.application.length === 1
   ) {
-    importsInTypesFile.set("isFunction", SYSTEM_TYPES);
-    return `isFunction(${entry.parameters[0].name})`;
+    const application = specialization.application[0];
+    if (
+      typeof application === "object" &&
+      application.kind === "fn"
+    ) {
+      importsInTypesFile.set("isFunction", SYSTEM_TYPES);
+      return `isFunction(${entry.parameters[0].name})`;
+    } else if (isPointer(application)) {
+      return `${entry.parameters[0].name} === "pointer" || ${
+        entry.parameters[0].name
+      } === "buffer"`;
+    }
   }
   throw new Error("Unknown template type check kind");
 };
@@ -236,18 +249,33 @@ const generateDestructuring = (
   importsInTypesFile: ImportMap,
   replaceMap: Map<string, string>,
 ) => {
-  if (
-    specialization.application.length === 1 &&
-    typeof specialization.application[0] === "object"
+  if (specialization.application.length === 0) {
+    return "";
+  } else if (
+    specialization.application.length === 1
   ) {
-    return `const ${
-      renderTypeAsFfi(
-        dependencies,
-        importsInTypesFile,
-        specialization.application[0],
-        replaceMap,
-      )
-    } = ${entry.parameters[0].name};`;
+    const application = specialization.application[0];
+    if (isPointer(application) && application.pointee !== "self") {
+      return `const ${
+        renderTypeAsFfi(
+          dependencies,
+          importsInTypesFile,
+          application.pointee,
+          replaceMap,
+        )
+      } = ${entry.parameters[0].name};`;
+    } else if (
+      typeof application === "object"
+    ) {
+      return `const ${
+        renderTypeAsFfi(
+          dependencies,
+          importsInTypesFile,
+          application,
+          replaceMap,
+        )
+      } = ${entry.parameters[0].name};`;
+    }
   }
   throw new Error("Unknown template type check kind");
 };

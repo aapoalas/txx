@@ -230,6 +230,13 @@ const gatherEntries = (context: Context, parentCursor: CXCursor) =>
   void parentCursor.visitChildren((cursor) => {
     switch (cursor.kind) {
       case CXCursorKind.CXCursor_ClassTemplate:
+        // Recurse into class templates first and add all entries
+        // defined within our class definition.
+        context.pushToNamespaceStack(cursor.getSpelling());
+        gatherEntries(context, cursor);
+        context.popFromNamespaceStack();
+
+        // Add the class template only after
         context.addClassTemplate(cursor);
         break;
       case CXCursorKind.CXCursor_ClassTemplatePartialSpecialization:
@@ -273,15 +280,13 @@ const gatherEntries = (context: Context, parentCursor: CXCursor) =>
           break;
         }
 
-        // Recurse into classes first and add all classes defined
-        // within our class definition.
+        // Recurse into classes first and add all entries
+        // defined within our class definition.
         context.pushToNamespaceStack(cursor.getSpelling());
         gatherEntries(context, cursor);
         context.popFromNamespaceStack();
 
-        // Add the class only after, and after that add
-        // all type definitions from inside the class.
-        // This ensures proper order of imports.
+        // Add the class only after
         context.addClass(cursor);
         break;
       case CXCursorKind.CXCursor_TypedefDecl:

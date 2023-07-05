@@ -300,9 +300,10 @@ export const renderTypeAsFfi = (
   } else if (type.kind === "member pointer") {
     return JSON.stringify(createSizedStruct(type.type));
   } else if (type.kind === "class<T>") {
-    importMap.set(`${type.name}T`, typesFile(type.file));
-    importMap.set("ptr", SYSTEM_TYPES);
-    return `${type.name}T`;
+    const nameT = `${type.name}T`;
+    importMap.set(nameT, typesFile(type.file));
+    dependencies.add(nameT);
+    return nameT;
   } else if (type.kind === "union") {
     const name = type.name;
     const nameT = `${name}T`;
@@ -406,18 +407,18 @@ export const renderTypeAsTS = (
     }
     if (isStructLike(type.pointee) && type.pointee.name) {
       if (intoJS) {
-        const name = `${type.pointee.name}Pointer`;
-        importMap.set(`type ${name}`, typesFile(type.pointee.file));
-        dependencies.add(name);
-        return name;
+        const namePointer = `${type.pointee.name}Pointer`;
+        importMap.set(`type ${namePointer}`, typesFile(type.pointee.file));
+        dependencies.add(namePointer);
+        return namePointer;
       } else {
-        const name = `${type.pointee.name}Buffer`;
+        const nameBuffer = `${type.pointee.name}Buffer`;
         importMap.set(
-          typeOnly ? `type ${name}` : name,
+          typeOnly ? `type ${nameBuffer}` : nameBuffer,
           classesFile(type.pointee.file),
         );
-        dependencies.add(name);
-        return name;
+        dependencies.add(nameBuffer);
+        return nameBuffer;
       }
     } else if (isFunction(type.pointee)) {
       return renderTypeAsTS(dependencies, importMap, type.pointee);
