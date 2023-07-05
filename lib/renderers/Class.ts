@@ -84,7 +84,9 @@ export const renderClass = ({
   for (const base of entry.bases) {
     const BaseT = `${base.name}T`;
     const BasePointer = `${base.name}Pointer`;
-    inheritedPointers.push(BasePointer);
+    if (fields.length === 0) {
+      inheritedPointers.push(BasePointer);
+    }
     let baseType: CXType;
     if (base.kind === "inline class<T>") {
       importsInTypesFile.set(BasePointer, typesFile(base.template.file));
@@ -119,7 +121,9 @@ export const renderClass = ({
   for (const base of entry.virtualBases) {
     const BaseT = `${base.name}T`;
     const BasePointer = `${base.name}Pointer`;
-    inheritedPointers.push(BasePointer);
+    if (fields.length === 0) {
+      inheritedPointers.push(BasePointer);
+    }
     importsInTypesFile.set(BasePointer, typesFile(base.file));
     importsInTypesFile.set(BaseT, typesFile(base.file));
 
@@ -201,34 +205,36 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
     importsInBindingsFile.set(ClassT, typesFilePath);
     importsInBindingsFile.set("buf", SYSTEM_TYPES);
     bindings.add(`${lib__Class}__${Constructor}`);
-    const bindingsFileData = `export const ${lib__Class}__${Constructor} = {
-  name: "${method.manglings[1]}",
-  parameters: [${
-      [bufClassT].concat(method.parameters.map((param) =>
-        renderTypeAsFfi(dependencies, importsInBindingsFile, param.type)
-      ))
-        .join(", ")
-    }],
-  result: "void",
-} as const;
-`;
+    const bindingsFileData = renderFunctionExport(
+      `${lib__Class}__${Constructor}`,
+      method.manglings[1],
+      [bufClassT].concat(
+        method.parameters.map((param) =>
+          renderTypeAsFfi(dependencies, importsInBindingsFile, param.type)
+        ),
+      ),
+      `"void"`,
+    );
     entriesInBindingsFile.push(createRenderDataEntry([], [], bindingsFileData));
     bufferEntryItems.push(
-      `  static ${Constructor}(${
+      renderClassMethod(
+        Constructor,
         method.parameters.map((param) =>
           `${param.name}: ${
             renderTypeAsTS(dependencies, importsInClassesFile, param.type)
           }`
-        ).concat(`self = new ${ClassBuffer}()`)
-          .join(", ")
-      }): ${ClassBuffer} {
-    ${lib__Class}__${Constructor}(${
-        ["self"].concat(method.parameters.map((param) => param.name))
-          .join(", ")
-      });
-    return self;
-  }
-`,
+        ).concat(`self = new ${ClassBuffer}()`),
+        ClassBuffer,
+        `${lib__Class}__${Constructor}(${
+          ["self"].concat(method.parameters.map((param) => param.name))
+            .join(", ")
+        });
+  return self;`,
+        {
+          overridden: false,
+          static: true,
+        },
+      ),
     );
   }
   if (entry.destructor) {
@@ -236,38 +242,51 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
     importsInBindingsFile.set(ClassT, typesFilePath);
     importsInBindingsFile.set("buf", SYSTEM_TYPES);
     bindings.add(`${lib__Class}__Destructor`);
-    const completeDestructorString = `export const ${lib__Class}__Destructor = {
-  name: "${entry.destructor.manglings[1]}",
-  parameters: [${bufClassT}],
-  result: "void",
-} as const;
-`;
+    const completeDestructorString = renderFunctionExport(
+      `${lib__Class}__Destructor`,
+      entry.destructor.manglings[1],
+      [bufClassT],
+      `"void"`,
+    );
     entriesInBindingsFile.push(
       createDummyRenderDataEntry(completeDestructorString),
     );
     bufferEntryItems.push(
-      `  delete(): void {
-    ${lib__Class}__Destructor(this);
-  }
-`,
+      renderClassMethod(
+        "delete",
+        [],
+        "void",
+        `${lib__Class}__Destructor(this);`,
+        { static: false, overridden: false },
+      ),
     );
+
     if (entry.destructor.manglings.length > 2) {
       bindings.add(`${lib__Class}__Delete`);
       importsInClassesFile.set(`${lib__Class}__Delete`, FFI);
       importsInBindingsFile.set("ptr", SYSTEM_TYPES);
-      const deletingDestructorString = `export const ${lib__Class}__Delete = {
-    name: "${entry.destructor.manglings[2]}",
-    parameters: [ptr(${ClassT})],
-    result: "void",
-} as const;
-`;
+      const deletingDestructorString = renderFunctionExport(
+        `${lib__Class}__Delete`,
+        entry.destructor.manglings[2],
+        [`ptr(${ClassT})`],
+        `"void"`,
+      );
       entriesInBindingsFile.push(
         createDummyRenderDataEntry(deletingDestructorString),
       );
-      bufferEntryItems.push(`  static delete(self: Deno.PointerValue): void {
-    ${lib__Class}__Delete(self);
-  }
-`);
+      importsInClassesFile.set(ClassPointer, typesFilePath);
+      bufferEntryItems.push(
+        renderClassMethod(
+          "delete",
+          [`self: ${ClassPointer}`],
+          "void",
+          `${lib__Class}__Delete(self);`,
+          {
+            static: true,
+            overridden: false,
+          },
+        ),
+      );
     }
   }
   for (const method of entry.methods) {
@@ -320,36 +339,31 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
         ? `return new ${returnTsType}(${callString}.buffer);`
         : `return ${callString}`;
       bindings.add(`${lib__Class}__${methodName}`);
-      const methodBindingData = `export const ${lib__Class}__${methodName} = {
-    name: "${method.mangling}",
-    parameters: [${
+      const methodBindingData = renderFunctionExport(
+        `${lib__Class}__${methodName}`,
+        method.mangling,
         (method.cursor.isStatic() ? [] : [bufClassT]).concat(
           method.parameters.map((x) =>
             renderTypeAsFfi(dependencies, importsInBindingsFile, x.type)
           ),
-        ).join(", ")
-      }],
-    result: ${
-        renderTypeAsFfi(dependencies, importsInBindingsFile, method.result)
-      },
-} as const;
-`;
-      entriesInBindingsFile.push(createDummyRenderDataEntry(methodBindingData));
-      bufferEntryItems.push(
-        `  ${method.cursor.isStatic() ? "static " : ""}${
-          method.cursor.getOverriddenCursors().length > 0 ? "override " : ""
-        }${renameForbiddenMethods(methodName, method)}(${
-          method.parameters.map((param) =>
-            `${param.name}: ${
-              renderTypeAsTS(dependencies, importsInClassesFile, param.type)
-            }`
-          )
-            .join(", ")
-        }): ${maybeNullishString}${returnTsType} {
-        ${returnString}${typeAssertString}
-    }
-`,
+        ),
+        renderTypeAsFfi(dependencies, importsInBindingsFile, method.result),
       );
+      entriesInBindingsFile.push(createDummyRenderDataEntry(methodBindingData));
+      bufferEntryItems.push(renderClassMethod(
+        renameForbiddenMethods(methodName, method),
+        method.parameters.map((param) =>
+          `${param.name}: ${
+            renderTypeAsTS(dependencies, importsInClassesFile, param.type)
+          }`
+        ),
+        `${maybeNullishString}${returnTsType}`,
+        `${returnString}${typeAssertString}`,
+        {
+          overridden: method.cursor.getOverriddenCursors().length > 0,
+          static: method.cursor.isStatic(),
+        },
+      ));
     } else {
       // Non-POD return type: SysV ABI has a special sauce for these.
       // TODO: There might be false positives here? POD is a bit more strict than SysV ABI.
@@ -364,38 +378,38 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
         { typeOnly: false, intoJS: true },
       );
       bindings.add(`${lib__Class}__${methodName}`);
-      const methodBindingData = `export const ${lib__Class}__${methodName} = {
-    name: "${method.mangling}",
-    parameters: [${
-        (method.cursor.isStatic() ? [resultType] : [resultType, ClassT]).concat(
-          method.parameters.map((x) =>
-            renderTypeAsFfi(dependencies, importsInBindingsFile, x.type)
-          ),
-        ).join(", ")
-      }],
-    result: "pointer",
-} as const;
-`;
+      const parameterTypes = method.parameters.map((x) =>
+        renderTypeAsFfi(dependencies, importsInBindingsFile, x.type)
+      );
+      const methodBindingData = renderFunctionExport(
+        `${lib__Class}__${methodName}`,
+        method.mangling,
+        method.cursor.isStatic()
+          ? [resultType, ...parameterTypes]
+          : [resultType, ClassT, ...parameterTypes],
+        `"void"`,
+      );
       entriesInBindingsFile.push(createDummyRenderDataEntry(methodBindingData));
       bufferEntryItems.push(
-        `  ${method.cursor.isStatic() ? "static " : ""}${
-          method.cursor.getOverriddenCursors().length > 0 ? "override " : ""
-        }${renameForbiddenMethods(methodName, method)}(${
+        renderClassMethod(
+          renameForbiddenMethods(methodName, method),
           method.parameters.map((param) =>
             `${param.name}: ${
               renderTypeAsTS(dependencies, importsInClassesFile, param.type)
             }`
-          ).concat(`result = new ${resultJsType}()`)
-            .join(", ")
-        }): ${resultJsType} {
-          ${lib__Class}__${methodName}(${
-          (method.cursor.isStatic() ? ["result"] : ["result", "this"]).concat(
-            method.parameters.map((param) => param.name),
-          ).join(", ")
-        });
-          return result;
-        }
-      `,
+          ).concat(`result = new ${resultJsType}()`),
+          resultJsType,
+          `${lib__Class}__${methodName}(${
+            (method.cursor.isStatic() ? ["result"] : ["result", "this"]).concat(
+              method.parameters.map((param) => param.name),
+            ).join(", ")
+          });
+  return result;`,
+          {
+            overridden: method.cursor.getOverriddenCursors().length > 0,
+            static: method.cursor.isStatic(),
+          },
+        ),
       );
     }
   }
@@ -720,4 +734,35 @@ const classHasVirtualMethod = (cursor: CXCursor): boolean => {
       ? CXChildVisitResult.CXChildVisit_Break
       : CXChildVisitResult.CXChildVisit_Continue
   );
+};
+
+const renderFunctionExport = (
+  exportName: string,
+  mangling: string,
+  parameters: string[],
+  result: string,
+) =>
+  `export const ${exportName} = {
+  name: "${mangling}",
+  parameters: [${parameters.join(", ")}],
+  result: ${result},
+} as const;
+`;
+
+const renderClassMethod = (
+  methodName: string,
+  parameters: string[],
+  result: string,
+  body: string,
+  options: {
+    static: boolean;
+    overridden: boolean;
+  },
+) => {
+  return `  ${options.static ? "static " : ""}${
+    options.overridden ? "override " : ""
+  }${methodName}(${parameters.join(", ")}): ${result} {
+  ${body}
+}
+`;
 };
