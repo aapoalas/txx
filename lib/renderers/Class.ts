@@ -236,11 +236,13 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
         }))
           .concat({ name: "self", defaultValue: `new ${ClassBuffer}()` }),
         ClassBuffer,
-        `${lib__Class}__${Constructor}(${
-          ["self"].concat(method.parameters.map((param) => param.name))
-            .join(", ")
-        });
-  return self;`,
+        [
+          `${lib__Class}__${Constructor}(${
+            ["self"].concat(method.parameters.map((param) => param.name))
+              .join(", ")
+          });`,
+          "return self;",
+        ],
         {
           overridden: false,
           static: true,
@@ -267,7 +269,7 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
         "delete",
         [],
         "void",
-        `${lib__Class}__Destructor(this);`,
+        [`${lib__Class}__Destructor(this);`],
         { static: false, overridden: false },
       ),
     );
@@ -291,7 +293,7 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
           "delete",
           [{ name: "self", type: ClassPointer }],
           "void",
-          `${lib__Class}__Delete(self);`,
+          [`${lib__Class}__Delete(self);`],
           {
             static: true,
             overridden: false,
@@ -348,7 +350,7 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
         : "";
       const returnString = returnsStruct
         ? `return new ${returnTsType}(${callString}.buffer);`
-        : `return ${callString}`;
+        : `return ${callString}${typeAssertString};`;
       bindings.add(`${lib__Class}__${methodName}`);
       const methodBindingData = renderFunctionExport(
         `${lib__Class}__${methodName}`,
@@ -368,7 +370,7 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
           type: renderTypeAsTS(dependencies, importsInClassesFile, param.type),
         })),
         `${maybeNullishString}${returnTsType}`,
-        `${returnString}${typeAssertString}`,
+        [returnString],
         {
           overridden: method.cursor.getOverriddenCursors().length > 0,
           static: method.cursor.isStatic(),
@@ -412,12 +414,15 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
             ),
           })).concat({ name: "result", type: `new ${resultJsType}()` }),
           resultJsType,
-          `${lib__Class}__${methodName}(${
-            (method.cursor.isStatic() ? ["result"] : ["result", "this"]).concat(
-              method.parameters.map((param) => param.name),
-            ).join(", ")
-          });
-  return result;`,
+          [
+            `${lib__Class}__${methodName}(${
+              (method.cursor.isStatic() ? ["result"] : ["result", "this"])
+                .concat(
+                  method.parameters.map((param) => param.name),
+                ).join(", ")
+            });`,
+            "return result;",
+          ],
           {
             overridden: method.cursor.getOverriddenCursors().length > 0,
             static: method.cursor.isStatic(),
@@ -776,7 +781,7 @@ const renderClassMethod = (
   methodName: string,
   parameters: ClassParameterRenderData[],
   result: string,
-  body: string,
+  bodyLines: string[],
   options: {
     static: boolean;
     overridden: boolean;
@@ -791,7 +796,7 @@ const renderClassMethod = (
       }`
     ).join(", ")
   }): ${result} {
-  ${body}
+${bodyLines.map((line) => `  ${line}`).join("\n")}
 }
 `;
 };
