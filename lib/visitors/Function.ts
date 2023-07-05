@@ -4,7 +4,7 @@ import type { Parameter, TypeEntry } from "../types.d.ts";
 import { isInlineTemplateStruct, isPointer, isStruct } from "../utils.ts";
 import { visitType } from "./Type.ts";
 
-export const visitFunction = (
+export const visitFunctionCursor = (
   context: Context,
   cursor: CXCursor,
 ) => {

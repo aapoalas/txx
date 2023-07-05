@@ -2,7 +2,7 @@ import { Context } from "../Context.ts";
 import { TypedefEntry } from "../types.d.ts";
 import { visitType } from "./Type.ts";
 
-export const visitTypedef = (
+export const visitTypedefEntry = (
   context: Context,
   name: string,
 ): TypedefEntry => {

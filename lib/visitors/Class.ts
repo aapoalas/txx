@@ -16,7 +16,7 @@ import {
 } from "../types.d.ts";
 import { getFileNameFromCursor, getNamespacedName } from "../utils.ts";
 import { getClassSpecializationByCursor } from "./ClassTemplate.ts";
-import { visitFunction } from "./Function.ts";
+import { visitFunctionCursor } from "./Function.ts";
 import { visitType } from "./Type.ts";
 
 const PLAIN_METHOD_NAME_REGEX = /^[\w_]+$/i;
@@ -196,7 +196,7 @@ const visitConstructor = (
   // pointing to the ClassBuffer.
   entry.usedAsBuffer = true;
 
-  const { parameters } = visitFunction(context, cursor);
+  const { parameters } = visitFunctionCursor(context, cursor);
   entry.constructors.push({
     parameters,
     cursor,
@@ -227,7 +227,7 @@ const visitDestructor = (
     return;
   }
 
-  visitFunction(context, cursor);
+  visitFunctionCursor(context, cursor);
   entry.destructor = {
     cursor,
     manglings: cursor.getCXXManglings(),
@@ -286,7 +286,7 @@ const visitMethod = (
     return;
   }
 
-  const { parameters, result } = visitFunction(context, cursor);
+  const { parameters, result } = visitFunctionCursor(context, cursor);
   entry.methods.push({
     parameters,
     cursor,

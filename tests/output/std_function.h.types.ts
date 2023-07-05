@@ -1,4 +1,4 @@
-import { functionT } from "./systemTypes.ts";
+import { buf, functionT } from "./systemTypes.ts";
 
 export const NULLARY_CALLBACK_SIZE = 32 as const;
 export const NullaryCallbackT = functionT({ parameters: [], result: "void" });
@@ -29,7 +29,7 @@ export type BinaryCallbackPointer = NonNullable<Deno.PointerValue> & {
 
 export const TERNARY_CALLBACK_SIZE = 32 as const;
 export const TernaryCallbackT = functionT({
-  parameters: ["i32", "i32", "i32"],
+  parameters: ["i32", "i32", buf(MyClassT)],
   result: "void",
 });
 declare const TernaryCallback: unique symbol;

@@ -22,6 +22,7 @@ import {
   getNamespacedName,
   getPlainTypeInfo,
   isInlineTemplateStruct,
+  isPointer,
   isStruct,
 } from "../utils.ts";
 import {
@@ -29,7 +30,7 @@ import {
   visitClassTemplateCursor,
 } from "./ClassTemplate.ts";
 import { visitEnum } from "./Enum.ts";
-import { visitTypedef } from "./Typedef.ts";
+import { visitTypedefEntry } from "./Typedef.ts";
 import { visitUnionCursor } from "./Union.ts";
 
 export const visitType = (context: Context, type: CXType): null | TypeEntry => {
@@ -41,7 +42,7 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
     ? type.getSpelling().substring(6)
     : type.getSpelling();
   if (kind === CXTypeKind.CXType_Typedef) {
-    return visitTypedef(context, name);
+    return visitTypedefEntry(context, name);
   } else if (kind === CXTypeKind.CXType_Unexposed) {
     const canonicalType = type.getCanonicalType();
     if (canonicalType.kind !== CXTypeKind.CXType_Unexposed) {
@@ -242,11 +243,19 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
       if (!parameterType) {
         throw new Error("Failed to visit parameter type");
       }
+
       if (isStruct(parameterType)) {
-        parameterType.usedAsPointer = true;
+        parameterType.usedAsBuffer = true;
       } else if (isInlineTemplateStruct(parameterType)) {
-        parameterType.specialization.usedAsPointer = true;
+        parameterType.specialization.usedAsBuffer = true;
+      } else if (isPointer(parameterType)) {
+        if (isStruct(parameterType.pointee)) {
+          parameterType.pointee.usedAsPointer = true;
+        } else if (isInlineTemplateStruct(parameterType.pointee)) {
+          parameterType.pointee.specialization.usedAsPointer = true;
+        }
       }
+
       parameters.push({
         kind: "parameter",
         comment: null,
@@ -407,23 +416,28 @@ const visitRecordType = (
     declaration.kind === CXCursorKind.CXCursor_StructDecl
   ) {
     const result = context.visitClassLikeByCursor(declaration);
-    if (result.kind !== "class<T>") {
-      throw new Error("Unexpected, lets deal with this later");
+    if (result.kind === "class") {
+      return result;
+    } else if (result.kind === "typedef") {
+      return result;
+    } else if (result.kind === "class<T>") {
+      return {
+        cursor: declaration,
+        file: getFileNameFromCursor(declaration),
+        kind: "inline class<T>",
+        parameters,
+        template: result,
+        specialization: getClassSpecializationByCursor(
+          result,
+          declaration.getSpecializedTemplate()!,
+        ),
+        type,
+        name: declaration.getSpelling(),
+        nsName: getNamespacedName(declaration),
+      } satisfies InlineClassTemplateTypeEntry;
+    } else {
+      throw new Error("Unexpected result from visitClassLikeByCursor");
     }
-    return {
-      cursor: declaration,
-      file: getFileNameFromCursor(declaration),
-      kind: "inline class<T>",
-      parameters,
-      template: result,
-      specialization: getClassSpecializationByCursor(
-        result,
-        declaration.getSpecializedTemplate()!,
-      ),
-      type,
-      name: declaration.getSpelling(),
-      nsName: getNamespacedName(declaration),
-    } satisfies InlineClassTemplateTypeEntry;
   } else if (declaration.kind === CXCursorKind.CXCursor_TypedefDecl) {
     throw new Error(`Unexpected TypedefDecl '${type.getSpelling()}'`);
     // const typedefEntry = context.findTypedefByCursor(declaration);

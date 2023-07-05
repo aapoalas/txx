@@ -83,14 +83,16 @@ const renderSpecialization = (
     return null;
   }
 
-  console.group(entry.nsName);
-  if (specialization.usedAsBuffer) {
-    console.log("Is used as buffer");
+  if (specialization.usedAsBuffer || specialization.usedAsPointer) {
+    console.group(entry.nsName);
+    if (specialization.usedAsBuffer) {
+      console.log("Is used as buffer");
+    }
+    if (specialization.usedAsPointer) {
+      console.log("Is used as pointer");
+    }
+    console.groupEnd();
   }
-  if (specialization.usedAsPointer) {
-    console.log("Is used as pointer");
-  }
-  console.groupEnd();
 
   const replaceMap = new Map<string, string>();
 

@@ -1,3 +1,4 @@
+import { MyClass__Constructor } from "./ffi.ts";
 import {
   BINARY_CALLBACK_SIZE,
   MY_CLASS_SIZE,
@@ -118,5 +119,10 @@ export class MyClassBuffer extends Uint8Array {
       );
     }
     super(arg);
+  }
+
+  static Constructor(self = new MyClassBuffer()): MyClassBuffer {
+    MyClass__Constructor(self);
+    return self;
   }
 }

@@ -16,6 +16,8 @@ export const isFunction = (
 
 export const func = (_?: unknown) => "function" as const;
 
+export const buf = (_: unknown) => "buffer" as const;
+
 export const _Nocopy_typesT = union3(
   { "struct": ["u64", "u64"] },
   "pointer",

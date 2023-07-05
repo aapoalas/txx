@@ -33,9 +33,9 @@ import {
 } from "./utils.ts";
 import { visitClassEntry } from "./visitors/Class.ts";
 import { visitClassTemplateEntry } from "./visitors/ClassTemplate.ts";
-import { visitFunction } from "./visitors/Function.ts";
-import { visitTypedef } from "./visitors/Typedef.ts";
-import { visitVar } from "./visitors/Var.ts";
+import { visitFunctionCursor } from "./visitors/Function.ts";
+import { visitTypedefEntry } from "./visitors/Typedef.ts";
+import { visitVarEntry } from "./visitors/Var.ts";
 
 export const SEP = "::";
 
@@ -308,7 +308,7 @@ export class Context {
     }
     const typedefEntry = this.findTypedefByName(importEntry.name);
     if (typedefEntry) {
-      visitTypedef(this, importEntry.name);
+      visitTypedefEntry(this, importEntry.name);
       return;
     }
     throw new Error(`Could not find class with name '${importEntry.name}'`);
@@ -328,7 +328,7 @@ export class Context {
     }
     const typedefEntry = this.findTypedefByCursor(cursor);
     if (typedefEntry) {
-      return visitTypedef(this, typedefEntry.name);
+      return visitTypedefEntry(this, typedefEntry.name);
     }
     const hasChildren = cursor.visitChildren(() =>
       CXChildVisitResult.CXChildVisit_Break
@@ -358,7 +358,7 @@ export class Context {
     if (!found) {
       throw new Error(`Could not find function '${importEntry.name}'`);
     }
-    const result = visitFunction(
+    const result = visitFunctionCursor(
       this,
       found.cursor,
     );
@@ -375,7 +375,7 @@ export class Context {
       throw new Error(`Could not find var '${importEntry.name}'`);
     }
 
-    visitVar(
+    visitVarEntry(
       this,
       found,
     );

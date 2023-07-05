@@ -38,16 +38,11 @@ export const renderTypedef = (
   }
 
   const {
-    entriesInClassesFile,
     entriesInTypesFile,
-    importsInClassesFile,
     importsInTypesFile,
-    typesFilePath,
   } = renderData;
 
   const nameT = `${name}T`;
-  const namePointer = `${name}Pointer`;
-  const nameBuffer = `${name}Buffer`;
   const dependencies = new Set<string>();
   if (typeof target === "string") {
     return renderStaticTarget(renderData, name, target);

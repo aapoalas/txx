@@ -29,6 +29,6 @@ Deno.test("std::function", async (t) => {
     include: [TESTS_BASE_PATH, "/lib64/clang/15.0.7/include"],
     outputPath: OUTPUT_PATH,
   });
-  await t.step("nullary", async (t) => {
+  await t.step("nullary", async (_t) => {
   });
 });
