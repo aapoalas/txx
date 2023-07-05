@@ -116,7 +116,13 @@ export const renderTypeAsTS = (
         const namePointer = `${type.pointee.name}Pointer`;
         importMap.set(`type ${namePointer}`, typesFile(type.pointee.file));
         dependencies.add(namePointer);
-        return namePointer;
+        return `${namePointer}<${
+          type.pointee.parameters.map((param) =>
+            param.kind === "<T>"
+              ? renderTypeAsFfiBindingTypes(dependencies, importMap, param)
+              : renderTypeAsFfiBindingTypes(dependencies, importMap, param.type)
+          )
+        }>`;
       } else {
         // Otherwise us a buffer.
         const nameBuffer = `${type.pointee.name}Buffer`;
@@ -125,7 +131,13 @@ export const renderTypeAsTS = (
           classesFile(type.pointee.file),
         );
         dependencies.add(nameBuffer);
-        return nameBuffer;
+        return `${nameBuffer}<${
+          type.pointee.parameters.map((param) =>
+            param.kind === "<T>"
+              ? renderTypeAsFfiBindingTypes(dependencies, importMap, param)
+              : renderTypeAsFfiBindingTypes(dependencies, importMap, param.type)
+          )
+        }>`;
       }
     }
     if (isStructLike(type.pointee) && type.pointee.name) {
@@ -167,7 +179,7 @@ export const renderTypeAsTS = (
     return `${nameBuffer}<${
       type.parameters.map((param) =>
         param.kind === "<T>"
-          ? param.name
+          ? renderTypeAsFfiBindingTypes(dependencies, importMap, param)
           : renderTypeAsFfiBindingTypes(dependencies, importMap, param.type)
       )
     }>`;

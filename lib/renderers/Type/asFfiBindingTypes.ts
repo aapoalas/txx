@@ -57,10 +57,10 @@ export const renderTypeAsFfiBindingTypes = (
     return `typeof ${nameT}`;
   } else if (type.kind === "class") {
     const name = type.name;
-    const nameT = `${name}T`;
+    const nameT = `${name}Pointer`;
     importMap.set(`type ${nameT}`, typesFile(type.file));
     dependencies.add(nameT);
-    return `typeof ${nameT}`;
+    return `${nameT}`;
   } else if (type.kind === "typedef") {
     const name = type.name;
     const nameT = `${name}T`;
@@ -93,23 +93,25 @@ export const renderTypeAsFfiBindingTypes = (
     )
       .join(", ");
     if (type.parameters.length === 1 && parametersStrings.startsWith("...")) {
-      return `{ parameters: ${parametersStrings.substring(3)}, result: ${
+      return `Deno.UnsafeCallbackDefinition<[${
+        parametersStrings.substring(3)
+      }], ${
         renderTypeAsFfiBindingTypes(
           dependencies,
           importMap,
           type.result,
           templateNameReplaceMap,
         )
-      } }`;
+      }>`;
     }
-    return `{ parameters: [${parametersStrings}], result: ${
+    return `Deno.UnsafeCallbackDefinition<[${parametersStrings}], ${
       renderTypeAsFfiBindingTypes(
         dependencies,
         importMap,
         type.result,
         templateNameReplaceMap,
       )
-    } }`;
+    }>`;
   } else if (type.kind === "inline class<T>") {
     const templateT = `${type.template.name}T`;
     importMap.set(templateT, typesFile(type.template.file));
@@ -185,8 +187,8 @@ export const renderTypeAsFfiBindingTypes = (
   } else if (type.kind === "member pointer") {
     return JSON.stringify(createSizedStruct(type.type));
   } else if (type.kind === "class<T>") {
-    const nameT = `${type.name}T`;
-    importMap.set(nameT, typesFile(type.file));
+    const nameT = `${type.name}Pointer`;
+    importMap.set(`type ${nameT}`, typesFile(type.file));
     dependencies.add(nameT);
     return nameT;
   } else if (type.kind === "union") {
