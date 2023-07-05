@@ -8,12 +8,6 @@ export const union2 = <const T, const U>(a: T, _b: U): T | U => a;
 
 export const ptr = (_: unknown) => "pointer" as const;
 
-export const isFunction = (
-  type: unknown,
-): type is Deno.UnsafeCallbackDefinition =>
-  type !== null && typeof type === "object" && "parameters" in type &&
-  Array.isArray(type.parameters) && "result" in type;
-
 export const func = (_?: unknown) => "function" as const;
 
 export const buf = (_: unknown) => "buffer" as const;
@@ -75,23 +69,25 @@ export type _Function_basePointer = NonNullable<Deno.PointerValue> & {
   [_Function_base]: unknown;
 };
 
-export const functionT = <const Signature>(
-  _Signature: Signature,
+declare const functionTemplate: unique symbol;
+declare const function__Signature: unique symbol;
+export type functionPointer<Signature extends Function> =
+  & _Function_basePointer
+  & { [functionTemplate]: unknown; [function__Signature]: Signature };
+export const functionT = <
+  const Signature extends Deno.UnsafeCallbackDefinition,
+>(
+  signature: Signature,
 ) => {
-  if (isFunction(_Signature)) {
-    const { parameters: _ArgTypes, result: _Res } = _Signature;
-    return {
-      struct: [
-        _Function_baseT, // base class, size 24, align 8
-        func({
-          parameters: [ptr(_Any_dataT), ..._ArgTypes.map(ptr)],
-          result: _Res,
-        }), // _M_invoker
-      ],
-    } as const;
-  } else {
-    throw new Error(
-      "Failed to build template class: No specialization matched",
-    );
-  }
+  const { parameters: argTypes, result: res } = signature;
+  return {
+    struct: [
+      _Function_baseT, // base class, size 24, align 8
+      func({
+        parameters: [ptr(_Any_dataT), ...argTypes.map(ptr)],
+        result: res,
+      }), // _M_invoker
+      _Function_baseT, // base class, size 24, align 8
+    ],
+  } as const;
 };

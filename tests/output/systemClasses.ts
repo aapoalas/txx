@@ -22,3 +22,5 @@ export class _Function_baseBuffer extends Uint8Array {
     super(arg);
   }
 }
+
+export class functionBuffer<_Signature extends Function> extends Uint8Array {}
