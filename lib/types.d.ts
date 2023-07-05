@@ -99,9 +99,12 @@ export interface ClassEntry extends BaseEntry {
   constructors: ClassConstructor[];
   destructor: null | ClassDestructor;
   fields: ClassField[];
+  forwardDeclarations: CXCursor[];
   methods: ClassMethod[];
   size: number;
   virtualBases: BaseClassEntry[];
+  usedAsPointer: boolean;
+  usedAsBuffer: boolean;
 }
 
 export interface ClassConstructor {
@@ -135,13 +138,15 @@ export type BaseClassEntry =
   | TypedefEntry;
 
 export interface ClassTemplateEntry extends BaseEntry {
+  defaultSpecialization: null | ClassTemplatePartialSpecialization;
+  forwardDeclarations: CXCursor[];
   kind: "class<T>";
   parameters: TemplateParameter[];
-  defaultSpecialization: ClassTemplatePartialSpecialization;
   partialSpecializations: ClassTemplatePartialSpecialization[];
 }
 
 export interface ClassTemplatePartialSpecialization {
+  name: string;
   application: TypeEntry[];
   kind: "partial class<T>";
   constructors: ClassConstructor[];
@@ -152,6 +157,8 @@ export interface ClassTemplatePartialSpecialization {
   methods: ClassMethod[];
   parameters: TemplateParameter[];
   used: boolean;
+  usedAsPointer: boolean;
+  usedAsBuffer: boolean;
   virtualBases: BaseClassEntry[];
 }
 
@@ -226,6 +233,7 @@ export interface InlineClassTemplateTypeEntry {
   nsName?: string;
   parameters: (Parameter | TemplateParameter)[];
   template: ClassTemplateEntry;
+  specialization: null | ClassTemplatePartialSpecialization;
   type: CXType;
 }
 

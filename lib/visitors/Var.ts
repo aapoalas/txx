@@ -1,6 +1,10 @@
-import { CXCursor } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
 import { Context } from "../Context.ts";
+import { VarEntry } from "../types.d.ts";
+import { visitType } from "./Type.ts";
 
-export const visitVar = (context: Context, cursor: CXCursor) => {
-  throw new Error("Vars not yet supported");
+export const visitVarEntry = (context: Context, entry: VarEntry): void => {
+  const type = visitType(context, entry.cursor.getType()!);
+
+  entry.type = type;
+  entry.used = true;
 };

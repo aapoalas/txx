@@ -1,3 +1,5 @@
+import { FUNCTION_BASE_SIZE } from "./systemTypes.ts";
+
 export class _Function_baseBuffer extends Uint8Array {
   constructor(arg?: ArrayBufferLike | number) {
     if (typeof arg === "undefined") {
@@ -20,3 +22,6 @@ export class _Function_baseBuffer extends Uint8Array {
     super(arg);
   }
 }
+
+export class functionBuffer<_Signature extends Deno.UnsafeCallbackDefinition>
+  extends Uint8Array {}

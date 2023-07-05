@@ -6,18 +6,23 @@ import {
   CXChildVisitResult,
   CXCursorKind,
 } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
-import {
-  CXCursor,
-  CXType,
-} from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
+import { CXCursor } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
 import { SEP } from "../Context.ts";
 import {
+  AbsoluteSystemTypesFilePath,
+  AbsoluteTypesFilePath,
+  BaseClassEntry,
+  ClassConstructor,
+  ClassDestructor,
   ClassEntry,
+  ClassField,
   ClassMethod,
   EnumEntry,
+  ImportMap,
   Parameter,
   PointerTypeEntry,
   RenderData,
+  RenderDataEntry,
   TypedefEntry,
   TypeEntry,
 } from "../types.d.ts";
@@ -26,13 +31,20 @@ import {
   createDummyRenderDataEntry,
   createRenderDataEntry,
   FFI,
-  isPointer,
+  isInlineTemplateStruct,
+  isPassableByValue,
   isPointerToStructLike,
-  isReturnedInRegisters,
+  isStruct,
   isStructLike,
+  isStructOrTypedefStruct,
   SYSTEM_TYPES,
   typesFile,
 } from "../utils.ts";
+import {
+  renderFunctionExport,
+  renderFunctionParameter,
+  renderFunctionReturnType,
+} from "./Function.ts";
 import { renderTypeAsFfi, renderTypeAsTS } from "./Type.ts";
 
 export const renderClass = ({
@@ -46,13 +58,11 @@ export const renderClass = ({
   typesFilePath,
 }: RenderData, entry: ClassEntry) => {
   const ClassPointer = `${entry.name}Pointer`;
-  const ClassBuffer = `${entry.name}Buffer`;
+  const ClassBuffer = `${entry.name}Buffer` as const;
   const ClassT = `${entry.name}T`;
-  const bufClassT = `buf(${ClassT})`;
   const lib__Class = entry.nsName.replaceAll(SEP, "__");
-  const CLASS_SIZE = `${constantCase(entry.name)}_SIZE`;
+  const CLASS_SIZE = `${constantCase(entry.name)}_SIZE` as const;
   const dependencies = new Set<string>();
-  importsInClassesFile.set(CLASS_SIZE, typesFilePath);
 
   const classType = entry.cursor.getType()!;
   const classSize = classType.getSizeOf();
@@ -70,55 +80,22 @@ export const renderClass = ({
   }
 
   const inheritedPointers: string[] = [];
+  const fieldRenderOptions = {
+    dependencies,
+    inheritedPointers,
+    importsInTypesFile,
+  };
 
   for (const base of entry.bases) {
-    const BaseT = `${base.name}T`;
-    const BasePointer = `${base.name}Pointer`;
-    inheritedPointers.push(BasePointer);
-    let baseType: CXType;
-    if (base.kind === "inline class<T>") {
-      importsInTypesFile.set(BasePointer, typesFile(base.template.file));
-      importsInTypesFile.set(BaseT, typesFile(base.template.file));
-      baseType = base.template.cursor.getType()!;
-    } else {
-      importsInTypesFile.set(BasePointer, typesFile(base.file));
-      importsInTypesFile.set(BaseT, typesFile(base.file));
-      baseType = base.cursor.getType()!;
-    }
-
-    const size = baseType.getSizeOf();
-    const align = baseType.getAlignOf();
-    fields.push(
-      `${BaseT}, // base class, size ${size}, align ${align}`,
-    );
+    renderClassBaseField(fieldRenderOptions, fields, base);
   }
 
-  entry.fields.forEach((field) => {
-    const fieldType = field.cursor.getType()!;
-    const size = fieldType.getSizeOf();
-    const align = fieldType.getAlignOf();
-    return fields.push(
-      `${
-        renderTypeAsFfi(dependencies, importsInTypesFile, field.type)
-      }, // ${field.name}, offset ${
-        field.cursor.getOffsetOfField() / 8
-      }, size ${size}, align ${align}`,
-    );
-  });
+  for (const field of entry.fields) {
+    renderClassField(fieldRenderOptions, fields, field);
+  }
 
   for (const base of entry.virtualBases) {
-    const BaseT = `${base.name}T`;
-    const BasePointer = `${base.name}Pointer`;
-    inheritedPointers.push(BasePointer);
-    importsInTypesFile.set(BasePointer, typesFile(base.file));
-    importsInTypesFile.set(BaseT, typesFile(base.file));
-
-    const baseType = base.cursor.getType()!;
-    const size = baseType.getSizeOf();
-    const align = baseType.getAlignOf();
-    fields.push(
-      `${BaseT}, // base class, size ${size}, align ${align}`,
-    );
+    renderClassBaseField(fieldRenderOptions, fields, base);
   }
 
   if (inheritedPointers.length === 0) {
@@ -130,7 +107,7 @@ export const renderClass = ({
   const classTypesData = `export const ${CLASS_SIZE} = ${classSize} as const;
 export const ${ClassT} = {
   struct: [
-${fields.join("\n")}
+    ${fields.join("\n    ")}
   ]
 } as const;
 declare const ${entry.name}: unique symbol;
@@ -145,262 +122,59 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
   );
   dependencies.clear();
   const bufferEntryItems: string[] = [];
-  for (const method of entry.constructors) {
-    method.cursor.isCopyConstructor;
-    const firstParam = method.parameters[0];
-    let Constructor = "Constructor";
-    let WithName = "";
-    if (
-      method.cursor.isCopyConstructor() ||
-      method.cursor.isMoveConstructor()
-    ) {
-      if (method.cursor.isCopyConstructor()) {
-        Constructor = "CopyConstructor";
-      } else {
-        Constructor = "MoveConstructor";
-      }
-      if (
-        typeof firstParam.type !== "object" ||
-        firstParam.type.kind !== "pointer"
-      ) {
-        throw new Error(
-          "Copy/Move constructor did not have pointer as first parameter",
-        );
-      }
-      if (firstParam.type.pointee !== entry) {
-        // Referring to inherited type
-        WithName = `With${
-          pascalCase((firstParam.type.pointee as ClassEntry).name)
-        }`;
-      }
-      if (method.parameters.length > 1) {
-        const extraParameterNames = method.parameters.slice(1).map((x) =>
-          createParameterOverloadName(x)
-        ).join("And");
-        WithName = WithName
-          ? `${WithName}And${extraParameterNames}`
-          : `With${extraParameterNames}`;
-      }
-    } else if (method.parameters.length) {
-      WithName = `With${
-        method.parameters.map((x) => createParameterOverloadName(x)).join("And")
-      }`;
-    }
-    Constructor = `${Constructor}${WithName}`;
-    importsInClassesFile.set(`${lib__Class}__${Constructor}`, FFI);
-    importsInBindingsFile.set(ClassT, typesFilePath);
-    importsInBindingsFile.set("buf", SYSTEM_TYPES);
-    bindings.add(`${lib__Class}__${Constructor}`);
-    const bindingsFileData = `export const ${lib__Class}__${Constructor} = {
-  name: "${method.manglings[1]}",
-  parameters: [${
-      [bufClassT].concat(method.parameters.map((param) =>
-        renderTypeAsFfi(dependencies, importsInBindingsFile, param.type)
-      ))
-        .join(", ")
-    }],
-  result: "void",
-} as const;
-`;
-    entriesInBindingsFile.push(createRenderDataEntry([], [], bindingsFileData));
-    bufferEntryItems.push(
-      `  static ${Constructor}(${
-        method.parameters.map((param) =>
-          `${param.name}: ${
-            renderTypeAsTS(dependencies, importsInClassesFile, param.type)
-          }`
-        ).concat(`self = new ${ClassBuffer}()`)
-          .join(", ")
-      }): ${ClassBuffer} {
-    ${lib__Class}__${Constructor}(${
-        ["self"].concat(method.parameters.map((param) => param.name))
-          .join(", ")
-      });
-    return self;
+  if (classSize !== 1 || entry.fields.length > 0) {
+    importsInClassesFile.set(CLASS_SIZE, typesFilePath);
+    bufferEntryItems.push(renderClassBufferConstructor(
+      ClassBuffer,
+      CLASS_SIZE,
+    ));
   }
-`,
-    );
+  const methodRenderOptions: MethodRenderOptions = {
+    bindings,
+    bufferEntryItems,
+    ClassBuffer,
+    ClassPointer,
+    ClassT,
+    dependencies,
+    entriesInBindingsFile,
+    entry,
+    importsInBindingsFile,
+    importsInClassesFile,
+    lib__Class,
+    typesFilePath,
+  };
+  for (const method of entry.constructors) {
+    renderClassConstructor(methodRenderOptions, method);
   }
   if (entry.destructor) {
-    importsInClassesFile.set(`${lib__Class}__Destructor`, FFI);
-    importsInBindingsFile.set(ClassT, typesFilePath);
-    importsInBindingsFile.set("buf", SYSTEM_TYPES);
-    bindings.add(`${lib__Class}__Destructor`);
-    const completeDestructorString = `export const ${lib__Class}__Destructor = {
-  name: "${entry.destructor.manglings[1]}",
-  parameters: [${bufClassT}],
-  result: "void",
-} as const;
-`;
-    entriesInBindingsFile.push(
-      createDummyRenderDataEntry(completeDestructorString),
-    );
-    bufferEntryItems.push(
-      `  delete(): void {
-    ${lib__Class}__Destructor(this);
-  }
-`,
-    );
-    if (entry.destructor.manglings.length > 2) {
-      bindings.add(`${lib__Class}__Delete`);
-      importsInClassesFile.set(`${lib__Class}__Delete`, FFI);
-      importsInBindingsFile.set("ptr", SYSTEM_TYPES);
-      const deletingDestructorString = `export const ${lib__Class}__Delete = {
-    name: "${entry.destructor.manglings[2]}",
-    parameters: [ptr(${ClassT})],
-    result: "void",
-} as const;
-`;
-      entriesInBindingsFile.push(
-        createDummyRenderDataEntry(deletingDestructorString),
-      );
-      bufferEntryItems.push(`  static delete(self: Deno.PointerValue): void {
-    ${lib__Class}__Delete(self);
-  }
-`);
-    }
+    renderClassDestructors(methodRenderOptions, entry.destructor);
   }
   for (const method of entry.methods) {
-    const overloads = entry.methods.filter((otherMethod) =>
-      otherMethod !== method &&
-      otherMethod.name === method.name
-    );
-
-    if (
-      method.cursor.isConst() &&
-      overloads.some((otherMethod) =>
-        !otherMethod.cursor.isStatic() && !otherMethod.cursor.isConst() &&
-        methodTypesAreEqual(method, otherMethod)
-      )
-    ) {
-      // Do not generate const versions of otherwise identical methods.
-      continue;
-    }
-    const methodName = overloads.length > 0
-      ? createMethodOverloadName(method, overloads)
-      : method.name;
-    importsInClassesFile.set(`${lib__Class}__${methodName}`, FFI);
-    if (!method.cursor.isStatic()) {
-      importsInBindingsFile.set(ClassT, typesFilePath);
-    }
-    if (
-      method.result === null || typeof method.result === "string" ||
-      isReturnedInRegisters(method.result)
-    ) {
-      const returnsStruct = isStructLike(method.result);
-      const returnTsType = renderTypeAsTS(
-        dependencies,
-        importsInClassesFile,
-        method.result,
-        {
-          typeOnly: !returnsStruct,
-          intoJS: true,
-        },
-      );
-      const callString = `${lib__Class}__${methodName}(${
-        (method.cursor.isStatic() ? [] : ["this"]).concat(
-          method.parameters.map((param) => param.name),
-        ).join(", ")
-      })`;
-      const maybeNullishString = isPointer(method.result) ? "null | " : "";
-      const typeAssertString = isPointerToStructLike(method.result)
-        ? ` as ${maybeNullishString}${returnTsType}`
-        : "";
-      const returnString = returnsStruct
-        ? `return new ${returnTsType}(${callString}.buffer);`
-        : `return ${callString}`;
-      bindings.add(`${lib__Class}__${methodName}`);
-      const methodBindingData = `export const ${lib__Class}__${methodName} = {
-    name: "${method.mangling}",
-    parameters: [${
-        (method.cursor.isStatic() ? [] : [bufClassT]).concat(
-          method.parameters.map((x) =>
-            renderTypeAsFfi(dependencies, importsInBindingsFile, x.type)
-          ),
-        ).join(", ")
-      }],
-    result: ${
-        renderTypeAsFfi(dependencies, importsInBindingsFile, method.result)
-      },
-} as const;
-`;
-      entriesInBindingsFile.push(createDummyRenderDataEntry(methodBindingData));
-      bufferEntryItems.push(
-        `  ${method.cursor.isStatic() ? "static " : ""}${
-          method.cursor.getOverriddenCursors().length > 0 ? "override " : ""
-        }${renameForbiddenMethods(methodName, method)}(${
-          method.parameters.map((param) =>
-            `${param.name}: ${
-              renderTypeAsTS(dependencies, importsInClassesFile, param.type)
-            }`
-          )
-            .join(", ")
-        }): ${maybeNullishString}${returnTsType} {
-        ${returnString}${typeAssertString}
-    }
-`,
-      );
-    } else {
-      // Non-POD return type: SysV ABI has a special sauce for these.
-      // TODO: There might be false positives here? POD is a bit more strict than SysV ABI.
-      importsInBindingsFile.set("buf", SYSTEM_TYPES);
-      const resultType = `buf(${
-        renderTypeAsFfi(dependencies, importsInBindingsFile, method.result)
-      })`;
-      const resultJsType = renderTypeAsTS(
-        dependencies,
-        importsInClassesFile,
-        method.result,
-        { typeOnly: false, intoJS: true },
-      );
-      bindings.add(`${lib__Class}__${methodName}`);
-      const methodBindingData = `export const ${lib__Class}__${methodName} = {
-    name: "${method.mangling}",
-    parameters: [${
-        (method.cursor.isStatic() ? [resultType] : [resultType, ClassT]).concat(
-          method.parameters.map((x) =>
-            renderTypeAsFfi(dependencies, importsInBindingsFile, x.type)
-          ),
-        ).join(", ")
-      }],
-    result: "pointer",
-} as const;
-`;
-      entriesInBindingsFile.push(createDummyRenderDataEntry(methodBindingData));
-      bufferEntryItems.push(
-        `  ${method.cursor.isStatic() ? "static " : ""}${
-          method.cursor.getOverriddenCursors().length > 0 ? "override " : ""
-        }${renameForbiddenMethods(methodName, method)}(${
-          method.parameters.map((param) =>
-            `${param.name}: ${
-              renderTypeAsTS(dependencies, importsInClassesFile, param.type)
-            }`
-          ).concat(`result = new ${resultJsType}()`)
-            .join(", ")
-        }): ${resultJsType} {
-          ${lib__Class}__${methodName}(${
-          (method.cursor.isStatic() ? ["result"] : ["result", "this"]).concat(
-            method.parameters.map((param) => param.name),
-          ).join(", ")
-        });
-          return result;
-        }
-      `,
-      );
-    }
+    renderClassMethod(methodRenderOptions, method);
   }
-  const BaseClass = entry.bases.length
-    ? `${entry.bases[0].name}Buffer`
-    : "Uint8Array";
-  if (
-    entry.bases.length
-  ) {
+  let BaseClass = "Uint8Array";
+  if (entry.bases.length > 0) {
+    BaseClass = renderTypeAsTS(
+      dependencies,
+      importsInClassesFile,
+      entry.bases[0],
+    );
+    importsInClassesFile.set(
+      BaseClass,
+      classesFile(entry.bases[0].file),
+    );
+  } else if (entry.fields.length === 0 && entry.virtualBases.length > 0) {
+    BaseClass = renderTypeAsTS(
+      dependencies,
+      importsInClassesFile,
+      entry.virtualBases[0],
+    );
     importsInClassesFile.set(
       BaseClass,
       classesFile(entry.bases[0].file),
     );
   }
-  if (entry.bases.length > 1) {
+  if ((entry.bases.length + entry.virtualBases.length) > 1) {
     console.warn(
       "Multi-inheritance detected,",
       entry.name,
@@ -408,29 +182,32 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
       entry.bases.map((x) => x.name).join(" and "),
     );
   }
-  const classDefinition = `export class ${ClassBuffer} extends ${BaseClass} {
-  constructor(arg?: ArrayBufferLike | number) {
-    if (typeof arg === "undefined") {
-      super(${CLASS_SIZE})
-      return;
-    } else if (typeof arg === "number") {
-      if (!Number.isFinite(arg) || arg < ${CLASS_SIZE}) {
-        throw new Error(
-          "Invalid construction of ${ClassBuffer}: Size is not finite or is too small",
-        );
-      }
-      super(arg);
-      return;
-    }
-    if (arg.byteLength < ${CLASS_SIZE}) {
-      throw new Error(
-        "Invalid construction of ${ClassBuffer}: Buffer size is too small",
-      );
-    }
-    super(arg);
+  if (bufferEntryItems.length === 0) {
+    // No buildable contents.
+    return;
   }
-
-${bufferEntryItems.join("\n")}}
+  if (
+    classSize === 1 && entry.fields.length === 0 &&
+    entry.methods.every((method) => method.cursor.isStatic()) &&
+    BaseClass === "Uint8Array"
+  ) {
+    // Class of only statics
+    const ClassObject = `${entry.name}`;
+    entriesInClassesFile.push(
+      createRenderDataEntry(
+        [ClassObject],
+        [],
+        `export class ${ClassObject} {
+  ${bufferEntryItems.join("\n  ")}
+}
+`,
+      ),
+    );
+    return;
+  }
+  const classDefinition = `export class ${ClassBuffer} extends ${BaseClass} {
+  ${bufferEntryItems.join("\n  ")}
+}
 `;
   entriesInClassesFile.push(
     createRenderDataEntry([ClassBuffer], [BaseClass], classDefinition),
@@ -473,6 +250,41 @@ const createMethodOverloadName = (
     overloads.length === 1 &&
     method.parameters.length > overloads[0].parameters.length
   ) {
+    const otherMethod = overloads[0];
+    const parameterDifferences = otherMethod.parameters.reduce<
+      ([Parameter, Parameter] | null)[]
+    >((acc, param, index) => {
+      if (acc.length > 0 && acc.at(-1) !== null) {
+        // Found inequal type or name
+        return acc;
+      } else if (
+        !typesAreEqual(param.type, method.parameters[index].type) ||
+        param.name !== method.parameters[index].name
+      ) {
+        // Inequal type or name.
+        acc.push([param, method.parameters[index]]);
+      } else {
+        // Equal type and name, ignorable.
+        acc.push(null);
+      }
+      return acc;
+    }, []);
+    if (parameterDifferences.length > 0 && parameterDifferences.some(Boolean)) {
+      const [otherParam, ownParam] = parameterDifferences.find(Boolean)!;
+      if (
+        otherParam.name !== ownParam.name &&
+        !method.name.toLowerCase().includes(ownParam.name.toLowerCase())
+      ) {
+        // If the first parameter difference between our two methods is between their parameter
+        // names then use the longer method's differing parameter name as the discriminant.
+        // Except, if the parameter name is already in the method name: This avoids generating
+        // useless names like "setDataWithData".
+        return `${method.name}With${pascalCase(ownParam.name)}`;
+      }
+      return `${method.name}With${
+        createParameterOverloadName(ownParam, ownParam.type)
+      }`;
+    }
     return `${method.name}With${
       method.parameters.slice(overloads[0].parameters.length).map(
         (param) => createParameterOverloadName(param, param.type),
@@ -594,6 +406,10 @@ const createMethodOverloadName = (
       return createParameterOverloadName(diff);
     },
   ).filter(Boolean);
+  if (method.name === "set" && paramDifferenceNames.length === 1) {
+    // Save a few key strokes when possible.
+    return `${method.name}${paramDifferenceNames[0]}`;
+  }
   return `${method.name}With${paramDifferenceNames.join("And")}`;
 };
 
@@ -711,3 +527,491 @@ const classHasVirtualMethod = (cursor: CXCursor): boolean => {
       : CXChildVisitResult.CXChildVisit_Continue
   );
 };
+
+interface FieldRenderOptions {
+  dependencies: Set<string>;
+  importsInTypesFile: ImportMap;
+  inheritedPointers: string[];
+  replaceMap?: Map<string, string>;
+}
+
+export const renderClassBaseField = (
+  { dependencies, importsInTypesFile, inheritedPointers, replaceMap }:
+    FieldRenderOptions,
+  fields: string[],
+  base: BaseClassEntry,
+) => {
+  const BaseT = renderTypeAsFfi(
+    dependencies,
+    importsInTypesFile,
+    base,
+    replaceMap,
+  );
+  let baseTypeSource: AbsoluteTypesFilePath;
+  if (base.kind === "inline class<T>") {
+    if (
+      base.specialization?.bases.length === 0 &&
+      base.specialization.fields.length === 0 &&
+      base.specialization.virtualBases.length === 0
+    ) {
+      return;
+    }
+    baseTypeSource = typesFile(base.template.file);
+  } else {
+    if (
+      base.kind === "class" && base.bases.length === 0 &&
+      base.fields.length === 0 && base.virtualBases.length === 0
+    ) {
+      return;
+    }
+    baseTypeSource = typesFile(base.file);
+  }
+  const baseType = base.cursor.getType();
+  if (
+    fields.length === 0 && (isStruct(base) || isStructOrTypedefStruct(base))
+  ) {
+    // Pointer to class with inheritance is only usable
+    // as the base class if the base class is concrete and
+    // is the very first field in the inheriting class
+    // and thus holds the vtable pointer.
+    const BasePointer = `${base.name}Pointer`;
+    inheritedPointers.push(BasePointer);
+    importsInTypesFile.set(BasePointer, baseTypeSource);
+  }
+
+  const size = baseType?.getSizeOf();
+  const align = baseType?.getAlignOf();
+  if (size && align) {
+    fields.push(`${BaseT}, // base class, size ${size}, align ${align}`);
+  } else {
+    fields.push(`${BaseT}, // base class`);
+  }
+};
+
+export const renderClassField = (
+  {
+    dependencies,
+    importsInTypesFile,
+    replaceMap,
+  }: FieldRenderOptions,
+  fields: string[],
+  field: ClassField,
+) => {
+  const fieldType = field.cursor.getType()!;
+  const size = fieldType.getSizeOf();
+  const align = fieldType.getAlignOf();
+  const sizeString = size >= 0 ? `, size ${size}` : "";
+  const alignString = align >= 0 ? `, align ${align}` : "";
+  const rawOffset = field.cursor.getOffsetOfField();
+  const offsetString = rawOffset >= 0 ? `, offset ${rawOffset / 8}` : "";
+  fields.push(
+    `${
+      renderTypeAsFfi(
+        dependencies,
+        importsInTypesFile,
+        field.type,
+        replaceMap,
+      )
+    }, // ${field.name}${offsetString}${sizeString}${alignString}`,
+  );
+};
+
+interface MethodRenderOptions {
+  bindings: Set<string>;
+  bufferEntryItems: string[];
+  ClassBuffer: string;
+  ClassPointer: string;
+  ClassT: string;
+  dependencies: Set<string>;
+  entriesInBindingsFile: RenderDataEntry[];
+  entry: ClassEntry;
+  importsInBindingsFile: ImportMap;
+  importsInClassesFile: ImportMap;
+  lib__Class: string;
+  typesFilePath: AbsoluteTypesFilePath | AbsoluteSystemTypesFilePath;
+}
+
+const renderClassConstructor = (
+  {
+    bindings,
+    bufferEntryItems,
+    ClassBuffer,
+    ClassT,
+    dependencies,
+    entriesInBindingsFile,
+    entry,
+    importsInBindingsFile,
+    importsInClassesFile,
+    lib__Class,
+    typesFilePath,
+  }: MethodRenderOptions,
+  method: ClassConstructor,
+) => {
+  method.cursor.isCopyConstructor;
+  const firstParam = method.parameters[0];
+  let Constructor = "Constructor";
+  let WithName = "";
+  if (
+    method.cursor.isCopyConstructor() ||
+    method.cursor.isMoveConstructor()
+  ) {
+    if (method.cursor.isCopyConstructor()) {
+      Constructor = "CopyConstructor";
+    } else {
+      Constructor = "MoveConstructor";
+    }
+    if (
+      typeof firstParam.type !== "object" ||
+      firstParam.type.kind !== "pointer"
+    ) {
+      throw new Error(
+        "Copy/Move constructor did not have pointer as first parameter",
+      );
+    }
+    if (firstParam.type.pointee !== entry) {
+      // Referring to inherited type
+      WithName = `With${
+        pascalCase((firstParam.type.pointee as ClassEntry).name)
+      }`;
+    }
+    if (method.parameters.length > 1) {
+      const extraParameterNames = method.parameters.slice(1).map((x) =>
+        createParameterOverloadName(x)
+      ).join("And");
+      WithName = WithName
+        ? `${WithName}And${extraParameterNames}`
+        : `With${extraParameterNames}`;
+    }
+  } else if (method.parameters.length) {
+    WithName = `With${
+      method.parameters.map((x) => createParameterOverloadName(x)).join("And")
+    }`;
+  }
+  const parameterStrings: string[] = [`buf(${ClassT})`];
+  const parameterNames: string[] = ["self"];
+  const parameterRenderData: ClassParameterRenderData[] = [];
+  for (const param of method.parameters) {
+    parameterNames.push(param.name);
+    parameterStrings.push(
+      renderFunctionParameter(dependencies, importsInBindingsFile, param),
+    );
+    parameterRenderData.push({
+      name: param.name,
+      type: renderTypeAsTS(dependencies, importsInClassesFile, param.type),
+    });
+  }
+  parameterRenderData.push({
+    name: "self",
+    defaultValue: `new ${ClassBuffer}()`,
+  });
+  Constructor = `${Constructor}${WithName}`;
+  importsInClassesFile.set(`${lib__Class}__${Constructor}`, FFI);
+  importsInBindingsFile.set(ClassT, typesFilePath);
+  importsInBindingsFile.set("buf", SYSTEM_TYPES);
+  bindings.add(`${lib__Class}__${Constructor}`);
+  const bindingsFileData = renderFunctionExport(
+    `${lib__Class}__${Constructor}`,
+    method.manglings[1],
+    parameterStrings,
+    `"void"`,
+  );
+  entriesInBindingsFile.push(createRenderDataEntry([], [], bindingsFileData));
+  bufferEntryItems.push(
+    renderClassMethodBinding(
+      Constructor,
+      parameterRenderData,
+      ClassBuffer,
+      [
+        `${lib__Class}__${Constructor}(${parameterNames.join(", ")});`,
+        "return self;",
+      ],
+      {
+        overridden: false,
+        static: true,
+      },
+    ),
+  );
+};
+
+const renderClassDestructors = (
+  {
+    bindings,
+    bufferEntryItems,
+    ClassPointer,
+    ClassT,
+    entriesInBindingsFile,
+    importsInBindingsFile,
+    importsInClassesFile,
+    lib__Class,
+    typesFilePath,
+  }: MethodRenderOptions,
+  destructor: ClassDestructor,
+) => {
+  importsInClassesFile.set(`${lib__Class}__Destructor`, FFI);
+  importsInBindingsFile.set(ClassT, typesFilePath);
+  importsInBindingsFile.set("buf", SYSTEM_TYPES);
+  bindings.add(`${lib__Class}__Destructor`);
+  const completeDestructorString = renderFunctionExport(
+    `${lib__Class}__Destructor`,
+    destructor.manglings[1],
+    [`buf(${ClassT})`],
+    `"void"`,
+  );
+  entriesInBindingsFile.push(
+    createDummyRenderDataEntry(completeDestructorString),
+  );
+  bufferEntryItems.push(
+    renderClassMethodBinding(
+      "delete",
+      [],
+      "void",
+      [`${lib__Class}__Destructor(this);`],
+      { static: false, overridden: false },
+    ),
+  );
+
+  if (destructor.manglings.length > 2) {
+    bindings.add(`${lib__Class}__Delete`);
+    importsInClassesFile.set(`${lib__Class}__Delete`, FFI);
+    importsInBindingsFile.set("ptr", SYSTEM_TYPES);
+    const deletingDestructorString = renderFunctionExport(
+      `${lib__Class}__Delete`,
+      destructor.manglings[2],
+      [`ptr(${ClassT})`],
+      `"void"`,
+    );
+    entriesInBindingsFile.push(
+      createDummyRenderDataEntry(deletingDestructorString),
+    );
+    importsInClassesFile.set(ClassPointer, typesFilePath);
+    bufferEntryItems.push(
+      renderClassMethodBinding(
+        "delete",
+        [{ name: "self", type: ClassPointer }],
+        "void",
+        [`${lib__Class}__Delete(self);`],
+        {
+          static: true,
+          overridden: false,
+        },
+      ),
+    );
+  }
+};
+
+const renderClassMethod = (
+  {
+    bindings,
+    bufferEntryItems,
+    ClassT,
+    dependencies,
+    entriesInBindingsFile,
+    entry,
+    importsInBindingsFile,
+    importsInClassesFile,
+    lib__Class,
+    typesFilePath,
+  }: MethodRenderOptions,
+  method: ClassMethod,
+) => {
+  const overloads = entry.methods.filter((otherMethod) =>
+    otherMethod !== method &&
+    otherMethod.name === method.name
+  );
+
+  if (
+    method.cursor.isConst() &&
+    overloads.some((otherMethod) =>
+      !otherMethod.cursor.isStatic() && !otherMethod.cursor.isConst() &&
+      methodTypesAreEqual(method, otherMethod)
+    )
+  ) {
+    // Do not generate const versions of otherwise identical methods.
+    return;
+  }
+  const methodName = overloads.length > 0
+    ? createMethodOverloadName(method, overloads)
+    : method.name;
+  importsInClassesFile.set(`${lib__Class}__${methodName}`, FFI);
+  const isStaticMethod = method.cursor.isStatic();
+  const returnByValue = isPassableByValue(method.result);
+  if (!isStaticMethod) {
+    importsInBindingsFile.set(ClassT, typesFilePath);
+  }
+  bindings.add(`${lib__Class}__${methodName}`);
+  const parameterNames = method.parameters.map((param) => param.name);
+  const parameterStrings = method.parameters.map((param) =>
+    renderFunctionParameter(dependencies, importsInBindingsFile, param)
+  );
+  const parameterTsTypes = method.parameters.map((
+    param,
+  ): ClassParameterRenderData => ({
+    name: param.name,
+    type: renderTypeAsTS(dependencies, importsInClassesFile, param.type),
+  }));
+  if (!isStaticMethod) {
+    // Instance methods pass this parameter.
+    parameterNames.unshift("this");
+    importsInBindingsFile.set("buf", SYSTEM_TYPES);
+    parameterStrings.unshift(`buf(${ClassT})`);
+  }
+  const resultTsType = renderTypeAsTS(
+    dependencies,
+    importsInClassesFile,
+    method.result,
+    {
+      intoJS: true,
+    },
+  );
+  const resultType = renderFunctionReturnType(
+    dependencies,
+    importsInBindingsFile,
+    method.result,
+    parameterStrings,
+  );
+  if (!returnByValue) {
+    // Result returned by 0th buffer parameter, named "result".
+    parameterNames.unshift("result");
+    if (
+      method.result && typeof method.result === "object" &&
+      "file" in method.result
+    ) {
+      importsInClassesFile.set(resultTsType, classesFile(method.result.file));
+    }
+    parameterTsTypes.push({
+      name: "result",
+      defaultValue: `new ${resultTsType}()`,
+    });
+  }
+  const tsCallString = `${lib__Class}__${methodName}(${
+    parameterNames.join(", ")
+  })`;
+  const bodyLines: string[] = [];
+  if (returnByValue) {
+    // Return by value calls can call function and return directly.
+    if (isPointerToStructLike(method.result)) {
+      // Pointers to struct-like types have their own pointer types that
+      // extend `Deno.PointerObject`. We need to do our own maybe-null typing.
+      bodyLines.push(`return ${tsCallString} as null | ${resultTsType};`);
+    } else if (isStructLike(method.result)) {
+      // Struct-like types return Uint8Array. We want to take the buffer and
+      // change into the proper custom ClassBuffer type.
+      bodyLines.push(`return new ${resultTsType}(${tsCallString}.buffer);`);
+    } else {
+      // All other types are good as-it-is.
+      bodyLines.push(`return ${tsCallString};`);
+    }
+  } else {
+    // Return by ref calls call the function first with "result"
+    // as 0th parameter, then return the result.
+    bodyLines.push(`${tsCallString};`, "return result;");
+  }
+  const methodBindingString = renderFunctionExport(
+    `${lib__Class}__${methodName}`,
+    method.mangling,
+    parameterStrings,
+    resultType,
+  );
+  entriesInBindingsFile.push(createDummyRenderDataEntry(methodBindingString));
+  const classMethodString = renderClassMethodBinding(
+    renameForbiddenMethods(methodName, method),
+    parameterTsTypes,
+    returnByValue && isPointerToStructLike(method.result)
+      ? `null | ${resultTsType}`
+      : resultTsType,
+    bodyLines,
+    {
+      overridden: method.cursor.getOverriddenCursors().length > 0,
+      static: isStaticMethod,
+    },
+  );
+  bufferEntryItems.push(classMethodString);
+
+  let count = 0;
+  const asd: string[] = [];
+  for (const param of method.parameters) {
+    if (
+      isStruct(param.type) && !isPassableByValue(param.type) &&
+      param.type.usedAsBuffer && param.type.usedAsPointer
+    ) {
+      asd.push(param.type.name);
+      count++;
+    } else if (
+      isInlineTemplateStruct(param.type) && !isPassableByValue(param.type)
+    ) {
+      if (!param.type.specialization) {
+        param.type.specialization = param.type.template.defaultSpecialization!;
+      }
+      if (
+        param.type.specialization.usedAsBuffer &&
+        param.type.specialization.usedAsPointer
+      ) {
+        asd.push(param.type.name!);
+        count++;
+      }
+    }
+  }
+  if (count) {
+    console.group(renameForbiddenMethods(methodName, method));
+    for (const a of asd) {
+      console.log(a);
+    }
+    console.groupEnd();
+  }
+};
+
+interface ClassParameterRenderData {
+  name: string;
+  type?: string;
+  defaultValue?: string;
+}
+
+const renderClassMethodBinding = (
+  methodName: string,
+  parameters: ClassParameterRenderData[],
+  result: string,
+  bodyLines: string[],
+  options: {
+    static: boolean;
+    overridden: boolean;
+  },
+) => {
+  return `  ${options.static ? "static " : ""}${
+    options.overridden ? "override " : ""
+  }${methodName}(${
+    parameters.map((param) =>
+      `${param.name}${param.type ? `: ${param.type}` : ""}${
+        param.defaultValue ? ` = ${param.defaultValue}` : ""
+      }`
+    ).join(", ")
+  }): ${result} {
+  ${bodyLines.join("\n  ")}
+}
+`;
+};
+
+export const renderClassBufferConstructor = (
+  ClassBuffer: `${string}Buffer`,
+  CLASS_SIZE: `${string}_SIZE`,
+) =>
+  `constructor(arg?: ArrayBufferLike | number) {
+  if (typeof arg === "undefined") {
+    super(${CLASS_SIZE});
+    return;
+  } else if (typeof arg === "number") {
+    if (!Number.isFinite(arg) || arg < ${CLASS_SIZE}) {
+      throw new Error(
+        "Invalid construction of ${ClassBuffer}: Size is not finite or is too small",
+      );
+    }
+    super(arg);
+    return;
+  }
+  if (arg.byteLength < ${CLASS_SIZE}) {
+    throw new Error(
+      "Invalid construction of ${ClassBuffer}: Buffer size is too small",
+    );
+  }
+  super(arg);
+}
+`;

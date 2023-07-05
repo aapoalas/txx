@@ -22,10 +22,34 @@ Deno.test("std::function", async (t) => {
       destructors: true,
       methods: true,
       name: "MyClass",
+    }, {
+      kind: "var",
+      name: "kValue",
+    }, {
+      kind: "class",
+      constructors: true,
+      destructors: true,
+      methods: true,
+      name: "PodClass",
+    }, {
+      kind: "class",
+      constructors: true,
+      destructors: true,
+      methods: true,
+      name: "OtherPodClass",
+    }, {
+      kind: "class",
+      constructors: true,
+      destructors: true,
+      methods: true,
+      name: "NonPodClass",
+    }, {
+      kind: "function",
+      name: "tryFunction",
     }],
     include: [TESTS_BASE_PATH, "/lib64/clang/15.0.7/include"],
     outputPath: OUTPUT_PATH,
   });
-  await t.step("nullary", async (t) => {
+  await t.step("nullary", async (_t) => {
   });
 });

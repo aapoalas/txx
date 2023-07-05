@@ -1,3 +1,4 @@
+import { CXTypeKind } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
 import {
   CX_CXXAccessSpecifier,
   CXChildVisitResult,
@@ -13,16 +14,10 @@ import {
   TemplateParameter,
   TypeEntry,
 } from "../types.d.ts";
-import { visitClassTemplateInstance } from "./ClassTemplate.ts";
-import { visitFunction } from "./Function.ts";
+import { getFileNameFromCursor, getNamespacedName } from "../utils.ts";
+import { getClassSpecializationByCursor } from "./ClassTemplate.ts";
+import { visitFunctionCursor } from "./Function.ts";
 import { visitType } from "./Type.ts";
-import { visitTypedef } from "./Typedef.ts";
-import {
-  getCursorFileLocation,
-  getFileNameFromCursor,
-  getNamespacedName,
-} from "../utils.ts";
-import { CXTypeKind } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
 
 const PLAIN_METHOD_NAME_REGEX = /^[\w_]+$/i;
 
@@ -197,7 +192,11 @@ const visitConstructor = (
     return;
   }
 
-  const { parameters } = visitFunction(context, cursor);
+  // Constructors always take a 0th parameter
+  // pointing to the ClassBuffer.
+  entry.usedAsBuffer = true;
+
+  const { parameters } = visitFunctionCursor(context, cursor);
   entry.constructors.push({
     parameters,
     cursor,
@@ -228,7 +227,7 @@ const visitDestructor = (
     return;
   }
 
-  visitFunction(context, cursor);
+  visitFunctionCursor(context, cursor);
   entry.destructor = {
     cursor,
     manglings: cursor.getCXXManglings(),
@@ -287,7 +286,7 @@ const visitMethod = (
     return;
   }
 
-  const { parameters, result } = visitFunction(context, cursor);
+  const { parameters, result } = visitFunctionCursor(context, cursor);
   entry.methods.push({
     parameters,
     cursor,
@@ -331,7 +330,8 @@ export const visitBaseClass = (
     const targc = type.getNumberOfTemplateArguments();
     for (let i = 0; i < targc; i++) {
       const targType = type.getTemplateArgumentAsType(i)!;
-      if (targType.kind === CXTypeKind.CXType_Unexposed) {
+      const kind = targType.kind;
+      if (kind === CXTypeKind.CXType_Unexposed) {
         // Template parameter
         const targName = targType.getSpelling();
         parameters.push(
@@ -345,7 +345,42 @@ export const visitBaseClass = (
             isRef: targName.includes(" &"),
           } satisfies TemplateParameter,
         );
+      } else if (
+        kind === CXTypeKind.CXType_Bool ||
+        kind === CXTypeKind.CXType_Char_U ||
+        kind === CXTypeKind.CXType_UChar ||
+        kind === CXTypeKind.CXType_UShort ||
+        kind === CXTypeKind.CXType_UInt ||
+        kind === CXTypeKind.CXType_ULong ||
+        kind === CXTypeKind.CXType_ULongLong ||
+        kind === CXTypeKind.CXType_Char_S ||
+        kind === CXTypeKind.CXType_SChar ||
+        kind === CXTypeKind.CXType_Short ||
+        kind === CXTypeKind.CXType_Int ||
+        kind === CXTypeKind.CXType_Long ||
+        kind === CXTypeKind.CXType_LongLong ||
+        kind === CXTypeKind.CXType_Float ||
+        kind === CXTypeKind.CXType_Double ||
+        kind === CXTypeKind.CXType_NullPtr
+      ) {
+        parameters.push({
+          comment: null,
+          kind: "parameter",
+          name: targType.getSpelling(),
+          type: visitType(context, targType)!,
+        });
+      } else {
+        throw new Error("Missing template argument kind handling");
       }
+    }
+    const specialization = getClassSpecializationByCursor(
+      baseClass,
+      definition.kind === CXCursorKind.CXCursor_StructDecl
+        ? definition.getSpecializedTemplate()!
+        : definition,
+    );
+    if (!specialization) {
+      throw new Error("Could not find specialization");
     }
     return {
       baseClass: {
@@ -354,6 +389,7 @@ export const visitBaseClass = (
         kind: "inline class<T>",
         parameters,
         template: baseClass,
+        specialization,
         type,
         name: definition.getSpelling(),
         nsName: getNamespacedName(definition),
@@ -363,31 +399,4 @@ export const visitBaseClass = (
   } else {
     return { baseClass, isVirtualBase };
   }
-  // const classEntry = context.findClassByCursor(definition);
-  // if (classEntry) {
-  //   return {
-  //     baseClass: visitClassEntry(context, classEntry, importEntry),
-  //     isVirtualBase,
-  //   };
-  // }
-  // const classTemplateEntry = context.findClassTemplateByCursor(definition);
-  // if (classTemplateEntry) {
-  //   return {
-  //     baseClass: visitClassTemplateInstance(
-  //       context,
-  //       definition,
-  //     ),
-  //     isVirtualBase,
-  //   };
-  // }
-  // const typedefEntry = context.findTypedefByCursor(definition);
-  // if (typedefEntry) {
-  //   return {
-  //     baseClass: visitTypedef(context, typedefEntry.name),
-  //     isVirtualBase,
-  //   };
-  // }
-  // throw new Error(
-  //   `Could not find class with cursor '${definition.getSpelling()}'`,
-  // );
 };

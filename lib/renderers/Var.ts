@@ -9,8 +9,8 @@ export const renderVar = ({
 }: RenderData, entry: VarEntry) =>
   void entriesInBindingsFile.push(createDummyRenderDataEntry(
     `export const ${entry.nsName.replaceAll(SEP, "__")} = {
-    name: "${entry.mangling}",
-    type: ${renderTypeAsFfi(new Set(), importsInBindingsFile, entry.type)},
+  name: "${entry.mangling}",
+  type: ${renderTypeAsFfi(new Set(), importsInBindingsFile, entry.type)},
 } as const;
 `,
   ));

@@ -1,10 +1,9 @@
-import { CXCursor } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
-import { Context } from "../Context.ts";
-import { InlineUnionTypeEntry } from "../types.d.ts";
 import {
   CXChildVisitResult,
   CXCursorKind,
 } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
+import { CXCursor } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
+import { Context } from "../Context.ts";
 import { visitType } from "./Type.ts";
 
 export const visitUnionCursor = (context: Context, cursor: CXCursor) => {

@@ -82,6 +82,8 @@ export const build = (configuration: ExportConfiguration) => {
 
   gatherEntries(context, tuCursor);
 
+  context.entriesGathered();
+
   for (const importEntry of configuration.imports) {
     if (importEntry.kind === "class") {
       context.visitClass(importEntry);
@@ -136,10 +138,18 @@ export const build = (configuration: ExportConfiguration) => {
   const entriesInSystemBindingsFile: RenderDataEntry[] = [];
   const entriesInSystemClassesFile: RenderDataEntry[] = [];
   const entriesInSystemTypesFile: RenderDataEntry[] = [];
+  const importsInSystemBindingsFile: ImportMap = new Map();
+  const importsInSystemClassesFile: ImportMap = new Map();
+  const importsInSystemTypesFile: ImportMap = new Map();
 
   for (const entry of entriesNeededInSystem) {
     const result = renderSystemFileConstant(entry);
-    if (result) {
+    if (
+      result &&
+      !entriesInSystemTypesFile.some((entry) =>
+        entry.contents === result.contents
+      )
+    ) {
       entriesInSystemTypesFile.push(result);
     }
   }
@@ -150,6 +160,15 @@ export const build = (configuration: ExportConfiguration) => {
     entriesInSystemBindingsFile.push(...outsideFile.entriesInBindingsFile);
     entriesInSystemClassesFile.push(...outsideFile.entriesInClassesFile);
     entriesInSystemTypesFile.push(...outsideFile.entriesInTypesFile);
+    for (const [key, value] of outsideFile.importsInBindingsFile) {
+      importsInSystemBindingsFile.set(key, value);
+    }
+    for (const [key, value] of outsideFile.importsInClassesFile) {
+      importsInSystemClassesFile.set(key, value);
+    }
+    for (const [key, value] of outsideFile.importsInTypesFile) {
+      importsInSystemTypesFile.set(key, value);
+    }
   }
 
   sortRenderDataEntries(entriesInSystemClassesFile);
@@ -162,9 +181,9 @@ export const build = (configuration: ExportConfiguration) => {
     entriesInBindingsFile: entriesInSystemBindingsFile,
     entriesInClassesFile: entriesInSystemClassesFile,
     entriesInTypesFile: entriesInSystemTypesFile,
-    importsInBindingsFile: new Map(),
-    importsInClassesFile: new Map(),
-    importsInTypesFile: new Map(),
+    importsInBindingsFile: importsInSystemBindingsFile,
+    importsInClassesFile: importsInSystemClassesFile,
+    importsInTypesFile: importsInSystemTypesFile,
     typesFilePath: systemTypesFilePath,
   });
 
@@ -223,6 +242,9 @@ const gatherEntries = (context: Context, parentCursor: CXCursor) =>
       case CXCursorKind.CXCursor_ClassTemplatePartialSpecialization:
         context.addClassTemplatePartialSpecialization(cursor);
         break;
+      case CXCursorKind.CXCursor_FunctionDecl:
+        context.addFunction(cursor);
+        break;
       case CXCursorKind.CXCursor_FunctionTemplate:
         /**
          * TODO: Support templates
@@ -258,15 +280,13 @@ const gatherEntries = (context: Context, parentCursor: CXCursor) =>
           break;
         }
 
-        // Recurse into classes first and add all classes defined
-        // within our class definition.
+        // Recurse into classes first and add all entries
+        // defined within our class definition.
         context.pushToNamespaceStack(cursor.getSpelling());
         gatherEntries(context, cursor);
         context.popFromNamespaceStack();
 
-        // Add the class only after, and after that add
-        // all type definitions from inside the class.
-        // This ensures proper order of imports.
+        // Add the class only after
         context.addClass(cursor);
         break;
       case CXCursorKind.CXCursor_TypedefDecl:
@@ -385,7 +405,8 @@ const writeFileData = (
       importPath = systemTypesFilePath;
     } else if (importPath === FFI) {
       importPath = `${basePath}/ffi.ts` as const;
-    } else if (importPath === filePath) {
+    }
+    if (importPath === filePath) {
       continue;
     }
     const importsList = importsInFileByFile.get(importPath) ||

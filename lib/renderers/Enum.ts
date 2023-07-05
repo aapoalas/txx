@@ -28,10 +28,10 @@ export const renderEnum = ({
       [...dependencies],
       `export const ${EnumT} = ${refT};
 export const enum ${Enum} {
-${
+  ${
         getEnumValues(entry.cursor).map((value) =>
           ` ${value.name}${value.value === null ? "" : ` = ${value.value}`},`
-        ).join("\n")
+        ).join("\n  ")
       }
 }
 `,

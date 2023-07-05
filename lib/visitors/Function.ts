@@ -1,9 +1,15 @@
 import { CXCursor } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
 import { Context } from "../Context.ts";
 import type { Parameter, TypeEntry } from "../types.d.ts";
+import {
+  isInlineTemplateStruct,
+  isPassableByValue,
+  isPointer,
+  isStruct,
+} from "../utils.ts";
 import { visitType } from "./Type.ts";
 
-export const visitFunction = (
+export const visitFunctionCursor = (
   context: Context,
   cursor: CXCursor,
 ) => {
@@ -41,6 +47,17 @@ export const visitFunction = (
     if (typeof type === "object" && "used" in type) {
       type.used = true;
     }
+
+    if (isStruct(type) && !isPassableByValue(type)) {
+      // Pass-by-value struct as a parameter only accepts Uint8Arrays in Deno.
+      type.usedAsBuffer = true;
+    } else if (isInlineTemplateStruct(type) && !isPassableByValue(type)) {
+      if (!type.specialization) {
+        type.specialization = type.template.defaultSpecialization!;
+      }
+      type.specialization.usedAsBuffer = true;
+    }
+
     parameters.push({
       kind: "parameter",
       comment: null,
@@ -59,6 +76,31 @@ export const visitFunction = (
     if (result !== null && typeof result === "object" && "used" in result) {
       result.used = true;
     }
+
+    if (isStruct(result)) {
+      // By-value struct returns as a Uint8Array,
+      // by-ref struct takes an extra Uint8Array parameter.
+      // Either way, the struct ends up as a buffer.
+      result.usedAsBuffer = true;
+    } else if (isInlineTemplateStruct(result)) {
+      // Same thing as above: One way or another the template
+      // instance struct ends up as a buffer.
+      if (!result.specialization) {
+        result.specialization = result.template.defaultSpecialization!;
+      }
+      result.specialization.usedAsBuffer = true;
+    } else if (isPointer(result)) {
+      if (isStruct(result.pointee)) {
+        result.pointee.usedAsPointer = true;
+      } else if (isInlineTemplateStruct(result.pointee)) {
+        if (!result.pointee.specialization) {
+          result.pointee.specialization = result.pointee.template
+            .defaultSpecialization!;
+        }
+        result.pointee.specialization.usedAsPointer = true;
+      }
+    }
+
     return {
       parameters,
       result,

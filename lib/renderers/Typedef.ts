@@ -23,7 +23,12 @@ import {
   isTypedef,
   typesFile,
 } from "../utils.ts";
-import { renderTypeAsFfi, renderTypeAsTS } from "./Type.ts";
+import {
+  renderTypeAsFfi,
+  renderTypeAsFfiBindingTypes,
+  renderTypeAsTS,
+} from "./Type.ts";
+import { renderClassBufferConstructor } from "./Class.ts";
 
 export const renderTypedef = (
   renderData: RenderData,
@@ -38,16 +43,11 @@ export const renderTypedef = (
   }
 
   const {
-    entriesInClassesFile,
     entriesInTypesFile,
-    importsInClassesFile,
     importsInTypesFile,
-    typesFilePath,
   } = renderData;
 
   const nameT = `${name}T`;
-  const namePointer = `${name}Pointer`;
-  const nameBuffer = `${name}Buffer`;
   const dependencies = new Set<string>();
   if (typeof target === "string") {
     return renderStaticTarget(renderData, name, target);
@@ -166,8 +166,8 @@ const renderTypedefTarget = (
   const targetName = target.name;
   const nameBuffer = `${name}Buffer`;
   const namePointer = `${name}Pointer`;
-  const targetBuffer = `${target}Buffer`;
-  const targetPointer = `${target}Pointer`;
+  const targetBuffer = `${targetName}Buffer`;
+  const targetPointer = `${targetName}Pointer`;
   const targetT = `${targetName}T`;
   if (isStructLike(target.target)) {
     importsInClassesFile.set(
@@ -186,7 +186,8 @@ const renderTypedefTarget = (
       createRenderDataEntry(
         [nameBuffer],
         [targetBuffer],
-        `export const ${nameBuffer} = ${targetBuffer};
+        `const ${nameBuffer} = ${targetBuffer};
+export { ${targetBuffer} as ${nameBuffer} };
 `,
       ),
     );
@@ -212,8 +213,7 @@ export type ${namePointer} = ${targetPointer};
       createRenderDataEntry(
         [nameT, name],
         [targetT, targetName],
-        `
-export const ${nameT} = ${targetT};
+        `export const ${nameT} = ${targetT};
 export type ${name} = ${targetName};
 `,
       ),
@@ -235,33 +235,15 @@ const renderInlineTemplateTarget = (
   const nameT = `${name}T`;
   const namePointer = `${name}Pointer`;
   const dependencies = new Set<string>();
-  const BUFFER_SIZE = `${constantCase(name)}_SIZE`;
+  const BUFFER_SIZE = `${constantCase(name)}_SIZE` as const;
   importsInClassesFile.set(BUFFER_SIZE, typesFilePath);
-  const nameBuffer = `${name}Buffer`;
+  const BaseBuffer = renderTypeAsTS(dependencies, importsInClassesFile, target);
+  const nameBuffer = `${name}Buffer` as const;
   const classesEntry = createRenderDataEntry(
     [nameBuffer],
     [],
-    `export class ${nameBuffer} extends Uint8Array {
-  constructor(arg?: ArrayBufferLike | number) {
-    if (typeof arg === "undefined") {
-      super(${BUFFER_SIZE})
-      return;
-    } else if (typeof arg === "number") {
-      if (!Number.isFinite(arg) || arg < ${BUFFER_SIZE}) {
-        throw new Error(
-          "Invalid construction of ${nameBuffer}: Size is not finite or is too small",
-        );
-      }
-      super(arg);
-      return;
-    }
-    if (arg.byteLength < ${BUFFER_SIZE}) {
-      throw new Error(
-        "Invalid construction of ${nameBuffer}: Buffer size is too small",
-      );
-    }
-    super(arg);
-  }
+    `export class ${nameBuffer} extends ${BaseBuffer} {
+  ${renderClassBufferConstructor(nameBuffer, BUFFER_SIZE)}
 }
 `,
   );
@@ -270,21 +252,33 @@ const renderInlineTemplateTarget = (
   );
   const asConst = isInlineTemplateStruct(target) ? "" : " as const";
   const NAME_SIZE = `${constantCase(name)}_SIZE`;
+  const refT = renderTypeAsFfi(
+    dependencies,
+    importsInTypesFile,
+    target,
+  );
+  const targetName = target.name;
+  const targetPointer = `${targetName}Pointer`;
+  dependencies.add(targetPointer);
+  importsInTypesFile.set(`type ${targetPointer}`, typesFile(target.file));
   const typesEntry = createRenderDataEntry(
     [NAME_SIZE, nameT, namePointer],
     [...dependencies],
     `export const ${NAME_SIZE} = ${
       target.cursor.getType()!.getSizeOf()
     } as const;
-export const ${nameT} = ${
-      renderTypeAsFfi(
-        dependencies,
-        importsInTypesFile,
-        target,
-      )
-    }${asConst};
-declare const ${name}: unique symbol;
-export type ${namePointer} = NonNullable<Deno.PointerValue> & { [${name}]: unknown };
+export const ${nameT} = ${refT}${asConst};
+export type ${namePointer} = ${targetPointer}<${
+      target.parameters.map((param) =>
+        param.kind === "parameter"
+          ? renderTypeAsFfiBindingTypes(
+            dependencies,
+            importsInTypesFile,
+            param.type,
+          )
+          : param.name
+      ).join(", ")
+    }>;
 `,
   );
   entriesInTypesFile.push(typesEntry);
@@ -305,8 +299,8 @@ const renderStruct = (
   const targetName = target.name;
   const nameBuffer = `${name}Buffer`;
   const namePointer = `${name}Pointer`;
-  const targetBuffer = `${target}Buffer`;
-  const targetPointer = `${target}Pointer`;
+  const targetBuffer = `${targetName}Buffer`;
+  const targetPointer = `${targetName}Pointer`;
   const targetT = `${targetName}T`;
   importsInClassesFile.set(
     targetBuffer,
@@ -333,7 +327,8 @@ export type ${namePointer} = ${targetPointer};
     createRenderDataEntry(
       [nameBuffer],
       [targetBuffer],
-      `export const ${nameBuffer} = ${targetBuffer};
+      `const ${nameBuffer} = ${targetBuffer};
+export { ${targetBuffer} as ${nameBuffer} };
 `,
     ),
   );
@@ -351,35 +346,16 @@ const renderInlineStructOrConstantArray = (
   target: InlineClassTypeEntry | ConstantArrayTypeEntry,
 ) => {
   const nameT = `${name}T`;
-  const nameBuffer = `${name}Buffer`;
+  const nameBuffer = `${name}Buffer` as const;
   const namePointer = `${name}Pointer`;
   const dependencies = new Set<string>();
-  const BUFFER_SIZE = `${constantCase(name)}_SIZE`;
+  const BUFFER_SIZE = `${constantCase(name)}_SIZE` as const;
   importsInClassesFile.set(BUFFER_SIZE, typesFilePath);
   const classesEntry = createRenderDataEntry(
     [nameBuffer],
     [],
     `export class ${nameBuffer} extends Uint8Array {
-  constructor(arg?: ArrayBufferLike | number) {
-    if (typeof arg === "undefined") {
-      super(${BUFFER_SIZE})
-      return;
-    } else if (typeof arg === "number") {
-      if (!Number.isFinite(arg) || arg < ${BUFFER_SIZE}) {
-        throw new Error(
-          "Invalid construction of ${nameBuffer}: Size is not finite or is too small",
-        );
-      }
-      super(arg);
-      return;
-    }
-    if (arg.byteLength < ${BUFFER_SIZE}) {
-      throw new Error(
-        "Invalid construction of ${nameBuffer}: Buffer size is too small",
-      );
-    }
-    super(arg);
-  }
+${renderClassBufferConstructor(nameBuffer, BUFFER_SIZE)}
 }
 `,
   );

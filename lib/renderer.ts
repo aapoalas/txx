@@ -4,6 +4,7 @@ import { renderEnum } from "./renderers/Enum.ts";
 import { renderFunction } from "./renderers/Function.ts";
 import { renderTypedef } from "./renderers/Typedef.ts";
 import { renderUnion } from "./renderers/Union.ts";
+import { renderVar } from "./renderers/Var.ts";
 import {
   AbsoluteFilePath,
   ImportMap,
@@ -68,6 +69,9 @@ export const renderFile = (
       case "union":
         renderUnion(memory, entry);
         break;
+      case "var":
+        renderVar(memory, entry);
+        break;
     }
   }
 
@@ -115,17 +119,30 @@ export const handleImports = (
 
 export const renderSystemFileConstant = (constant: string): RenderDataEntry => {
   let contents: string;
+  let names = [constant];
   switch (constant) {
     case "buf":
-      contents = `export const buf = (_: unknown) => "buffer" as const;
+    case "type Buf":
+      names = ["buf", "type Buf"];
+      contents = `declare const BufBrand: unique symbol;
+export type Buf<T> = "buffer" & { [BufBrand]: T };
+export const buf = <T>(_: T) => "buffer" as Buf<T>;
 `;
       break;
     case "ptr":
-      contents = `export const ptr = (_: unknown) => "pointer" as const;
+    case "type Ptr":
+      names = ["ptr", "type Ptr"];
+      contents = `declare const PtrBrand: unique symbol;
+export type Ptr<T> = "pointer" & { [PtrBrand]: T };
+export const ptr = <T>(_: T) => "pointer" as Ptr<T>;
 `;
       break;
     case "func":
-      contents = `export const func = (_?: unknown) => "function" as const;
+    case "type Func":
+      names = ["func", "type Func"];
+      contents = `declare const FuncBrand: unique symbol;
+export type Func<T> = "function" & { [FuncBrand]: T };
+export const func = <T>(_: T) => "function" as Func<T>;
 `;
       break;
     case "union2":
@@ -148,10 +165,12 @@ export const renderSystemFileConstant = (constant: string): RenderDataEntry => {
         `export const union5 = <const T, const U, const V, const W, const X>(a: T, _b: U, _c: V, _d: W, _e: X): T | U | V | W | X => a;
 `;
       break;
+    case "type cstringT":
     case "cstringT":
       contents = `export const cstringT = "buffer";
 `;
       break;
+    case "type cstringArrayT":
     case "cstringArrayT":
       contents = `export const cstringT = "buffer";
 `;
@@ -172,6 +191,6 @@ export const renderSystemFileConstant = (constant: string): RenderDataEntry => {
   return {
     contents,
     dependencies: [],
-    names: [constant],
+    names,
   };
 };
