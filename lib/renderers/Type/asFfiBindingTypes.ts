@@ -40,9 +40,9 @@ export const renderTypeAsFfiBindingTypes = (
       case "cstring":
       case "cstringArray": {
         const nameT = `${type}T`;
-        importMap.set(nameT, SYSTEM_TYPES);
+        importMap.set(`type ${nameT}`, SYSTEM_TYPES);
         dependencies.add(nameT);
-        return nameT;
+        return `typeof ${nameT}`;
       }
       default:
         throw new Error("Missing switch arm");
@@ -52,15 +52,15 @@ export const renderTypeAsFfiBindingTypes = (
   ) {
     const name = type.name;
     const nameT = `${name}T`;
-    importMap.set(nameT, typesFile(type.file));
+    importMap.set(`type ${nameT}`, typesFile(type.file));
     dependencies.add(nameT);
-    return nameT;
+    return `typeof ${nameT}`;
   } else if (type.kind === "class") {
     const name = type.name;
     const nameT = `${name}T`;
-    importMap.set(nameT, typesFile(type.file));
+    importMap.set(`type ${nameT}`, typesFile(type.file));
     dependencies.add(nameT);
-    return nameT;
+    return `typeof ${nameT}`;
   } else if (type.kind === "typedef") {
     const name = type.name;
     const nameT = `${name}T`;

@@ -165,10 +165,12 @@ export const func = <T>(_: T) => "function" as Func<T>;
         `export const union5 = <const T, const U, const V, const W, const X>(a: T, _b: U, _c: V, _d: W, _e: X): T | U | V | W | X => a;
 `;
       break;
+    case "type cstringT":
     case "cstringT":
       contents = `export const cstringT = "buffer";
 `;
       break;
+    case "type cstringArrayT":
     case "cstringArrayT":
       contents = `export const cstringT = "buffer";
 `;

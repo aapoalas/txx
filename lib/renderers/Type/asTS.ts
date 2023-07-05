@@ -7,6 +7,7 @@ import {
   isStructLike,
   typesFile,
 } from "../../utils.ts";
+import { renderTypeAsFfiBindingTypes } from "./asFfiBindingTypes.ts";
 
 export const renderTypeAsTS = (
   dependencies: Set<string>,
@@ -153,8 +154,21 @@ export const renderTypeAsTS = (
     );
     dependencies.add(name);
     return name;
+  } else if (type.kind === "inline class<T>") {
+    const nameBuffer = `${
+      type.specialization?.name || type.template.name
+    }Buffer`;
+    importMap.set(nameBuffer, classesFile(type.file));
+    dependencies.add(nameBuffer);
+    return `${nameBuffer}<${
+      type.parameters.map((param) =>
+        param.kind === "<T>"
+          ? param.name
+          : renderTypeAsFfiBindingTypes(dependencies, importMap, param.type)
+      )
+    }>`;
   } else if (
-    type.kind === "inline class" || type.kind === "inline class<T>" ||
+    type.kind === "inline class" ||
     type.kind === "[N]" || type.kind === "inline union"
   ) {
     return "Uint8Array";

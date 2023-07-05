@@ -148,13 +148,21 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
   }
   let BaseClass = "Uint8Array";
   if (entry.bases.length > 0) {
-    BaseClass = `${entry.bases[0].name}Buffer`;
+    BaseClass = renderTypeAsTS(
+      dependencies,
+      importsInClassesFile,
+      entry.bases[0],
+    );
     importsInClassesFile.set(
       BaseClass,
       classesFile(entry.bases[0].file),
     );
   } else if (entry.fields.length === 0 && entry.virtualBases.length > 0) {
-    BaseClass = `${entry.virtualBases[0].name}Buffer`;
+    BaseClass = renderTypeAsTS(
+      dependencies,
+      importsInClassesFile,
+      entry.virtualBases[0],
+    );
     importsInClassesFile.set(
       BaseClass,
       classesFile(entry.bases[0].file),
@@ -481,11 +489,17 @@ interface FieldRenderOptions {
 }
 
 export const renderClassBaseField = (
-  { dependencies, importsInTypesFile, inheritedPointers }: FieldRenderOptions,
+  { dependencies, importsInTypesFile, inheritedPointers, replaceMap }:
+    FieldRenderOptions,
   fields: string[],
   base: BaseClassEntry,
 ) => {
-  const BaseT = renderTypeAsFfi(dependencies, importsInTypesFile, base);
+  const BaseT = renderTypeAsFfi(
+    dependencies,
+    importsInTypesFile,
+    base,
+    replaceMap,
+  );
   let baseTypeSource: AbsoluteTypesFilePath;
   if (base.kind === "inline class<T>") {
     if (
@@ -517,7 +531,6 @@ export const renderClassBaseField = (
     inheritedPointers.push(BasePointer);
     importsInTypesFile.set(BasePointer, baseTypeSource);
   }
-  importsInTypesFile.set(BaseT, baseTypeSource);
 
   const size = baseType?.getSizeOf();
   const align = baseType?.getAlignOf();

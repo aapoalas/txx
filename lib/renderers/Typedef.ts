@@ -185,7 +185,8 @@ const renderTypedefTarget = (
       createRenderDataEntry(
         [nameBuffer],
         [targetBuffer],
-        `export const ${nameBuffer} = ${targetBuffer};
+        `const ${nameBuffer} = ${targetBuffer};
+export { ${targetBuffer} as ${nameBuffer} };
 `,
       ),
     );
@@ -343,7 +344,8 @@ export type ${namePointer} = ${targetPointer};
     createRenderDataEntry(
       [nameBuffer],
       [targetBuffer],
-      `export const ${nameBuffer} = ${targetBuffer};
+      `const ${nameBuffer} = ${targetBuffer};
+export { ${targetBuffer} as ${nameBuffer} };
 `,
     ),
   );

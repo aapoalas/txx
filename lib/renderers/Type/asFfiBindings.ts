@@ -123,7 +123,12 @@ export const renderTypeAsFfiBindings = (
             param.type,
             templateNameReplaceMap,
           )
-          : param.name
+          : renderTypeAsFfiBindings(
+            dependencies,
+            importMap,
+            param,
+            templateNameReplaceMap,
+          )
       ))
         .join(
           ", ",

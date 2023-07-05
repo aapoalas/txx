@@ -59,9 +59,10 @@ const renderSpecialization = (
   const dependencies = new Set<string>();
   const replaceMap = new Map<string, string>();
 
-  specialization.parameters.forEach((value, index) =>
-    replaceMap.set(`type-parameter-0-${index}`, camelCase(value.name))
-  );
+  specialization.parameters.forEach((value, index) => {
+    replaceMap.set(value.name, camelCase(value.name));
+    replaceMap.set(`type-parameter-0-${index}`, camelCase(value.name));
+  });
 
   const inheritedPointers: string[] = [];
   const fields: string[] = [];
@@ -80,7 +81,7 @@ const renderSpecialization = (
     renderClassField(fieldRenderOptions, fields, field);
   }
 
-  for (const base of specialization.bases) {
+  for (const base of specialization.virtualBases) {
     renderClassBaseField(fieldRenderOptions, fields, base);
   }
 
