@@ -208,7 +208,7 @@ const renderSpecialization = (
     )
   }
   return { struct: [
-  ${fields.join("\n")}
+  ${fields.join("\n  ")}
 ] };
 }`;
 };

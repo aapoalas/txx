@@ -155,7 +155,7 @@ export const renderClass = ({
   const classTypesData = `export const ${CLASS_SIZE} = ${classSize} as const;
 export const ${ClassT} = {
   struct: [
-${fields.join("\n")}
+    ${fields.join("\n    ")}
   ]
 } as const;
 declare const ${entry.name}: unique symbol;
@@ -475,7 +475,7 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
     super(arg);
   }
 
-${bufferEntryItems.join("\n")}
+  ${bufferEntryItems.join("\n  ")}
 }
 `;
   entriesInClassesFile.push(
