@@ -356,6 +356,7 @@ const renderInlineStructOrConstantArray = (
     [],
     `export class ${nameBuffer} extends Uint8Array {
 ${renderClassBufferConstructor(nameBuffer, BUFFER_SIZE)}
+}
 `,
   );
   entriesInClassesFile.push(
