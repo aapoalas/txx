@@ -6,10 +6,7 @@ import {
   CXChildVisitResult,
   CXCursorKind,
 } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
-import {
-  CXCursor,
-  CXType,
-} from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
+import { CXCursor } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
 import { SEP } from "../Context.ts";
 import {
   AbsoluteSystemTypesFilePath,
