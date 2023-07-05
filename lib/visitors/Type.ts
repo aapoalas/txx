@@ -21,8 +21,13 @@ import {
   getFileNameFromCursor,
   getNamespacedName,
   getPlainTypeInfo,
+  isInlineTemplateStruct,
+  isStruct,
 } from "../utils.ts";
-import { visitClassTemplateCursor } from "./ClassTemplate.ts";
+import {
+  getClassSpecializationByCursor,
+  visitClassTemplateCursor,
+} from "./ClassTemplate.ts";
 import { visitEnum } from "./Enum.ts";
 import { visitTypedef } from "./Typedef.ts";
 import { visitUnionCursor } from "./Union.ts";
@@ -65,6 +70,8 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
             methods: [],
             parameters: [],
             used: true,
+            usedAsBuffer: false,
+            usedAsPointer: false,
             virtualBases: [],
           },
           file: getFileNameFromCursor(templateDeclaration),
@@ -124,6 +131,7 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
           cursor: template.cursor,
           parameters,
           template,
+          specialization: template.defaultSpecialization,
           type,
           kind: "inline class<T>",
           name: template.name,
@@ -234,6 +242,11 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
       if (!parameterType) {
         throw new Error("Failed to visit parameter type");
       }
+      if (isStruct(parameterType)) {
+        parameterType.usedAsPointer = true;
+      } else if (isInlineTemplateStruct(parameterType)) {
+        parameterType.specialization.usedAsPointer = true;
+      }
       parameters.push({
         kind: "parameter",
         comment: null,
@@ -334,6 +347,7 @@ export const createInlineTypeEntry = (
     cursor: template.cursor,
     parameters,
     template,
+    specialization: getClassSpecializationByCursor(template, templateCursor),
     kind: "inline class<T>",
     name: template.name,
     nsName: template.nsName,
@@ -402,6 +416,10 @@ const visitRecordType = (
       kind: "inline class<T>",
       parameters,
       template: result,
+      specialization: getClassSpecializationByCursor(
+        result,
+        declaration.getSpecializedTemplate()!,
+      ),
       type,
       name: declaration.getSpelling(),
       nsName: getNamespacedName(declaration),

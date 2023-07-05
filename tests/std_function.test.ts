@@ -22,6 +22,9 @@ Deno.test("std::function", async (t) => {
       destructors: true,
       methods: true,
       name: "MyClass",
+    }, {
+      kind: "var",
+      name: "kValue",
     }],
     include: [TESTS_BASE_PATH, "/lib64/clang/15.0.7/include"],
     outputPath: OUTPUT_PATH,

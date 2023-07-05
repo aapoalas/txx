@@ -1,6 +1,7 @@
 import { CXCursor } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
 import { Context } from "../Context.ts";
 import type { Parameter, TypeEntry } from "../types.d.ts";
+import { isInlineTemplateStruct, isPointer, isStruct } from "../utils.ts";
 import { visitType } from "./Type.ts";
 
 export const visitFunction = (
@@ -59,6 +60,19 @@ export const visitFunction = (
     if (result !== null && typeof result === "object" && "used" in result) {
       result.used = true;
     }
+
+    if (isStruct(result)) {
+      result.usedAsBuffer = true;
+    } else if (isInlineTemplateStruct(result)) {
+      result.specialization.usedAsBuffer = true;
+    } else if (isPointer(result)) {
+      if (isStruct(result.pointee)) {
+        result.pointee.usedAsPointer = true;
+      } else if (isInlineTemplateStruct(result.pointee)) {
+        result.pointee.specialization.usedAsPointer = true;
+      }
+    }
+
     return {
       parameters,
       result,

@@ -2,7 +2,6 @@ import {
   CXChildVisitResult,
   CXCursor,
   CXCursorKind,
-  CXType,
 } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
 import { Context } from "../Context.ts";
 import {
@@ -15,7 +14,6 @@ import {
 import { getNamespacedName } from "../utils.ts";
 import { visitBaseClass } from "./Class.ts";
 import { createInlineTypeEntry, visitType } from "./Type.ts";
-import { CXTypeKind } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
 
 export const visitClassTemplateCursor = (
   context: Context,
@@ -38,6 +36,22 @@ export const visitClassTemplateCursor = (
     classTemplateEntry,
     foundPartialSpecialization,
   );
+};
+
+export const getClassSpecializationByCursor = (
+  entry: ClassTemplateEntry,
+  cursor: CXCursor,
+) => {
+  if (entry.defaultSpecialization.cursor.equals(cursor)) {
+    return entry.defaultSpecialization;
+  }
+  const specialization = entry.partialSpecializations.find((spec) =>
+    spec.cursor.equals(cursor)
+  );
+  if (!specialization) {
+    throw new Error("Could not find matching specialization");
+  }
+  return specialization;
 };
 
 export const visitClassTemplateEntry = (
@@ -334,6 +348,7 @@ export const visitClassTemplateInstance = (
       name: found.name,
       nsName: found.nsName,
       parameters: appliedParameters,
+      specialization: getClassSpecializationByCursor(found, instance),
       template: found,
       type: ttype,
     };
@@ -357,6 +372,7 @@ export const visitClassTemplateInstance = (
       name: found.name,
       nsName: found.nsName,
       parameters: appliedParameters,
+      specialization: getClassSpecializationByCursor(found, instance),
       template: found,
       type: ttype,
     };

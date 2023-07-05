@@ -78,6 +78,8 @@ export class Context {
       name,
       nsName,
       used: false,
+      usedAsBuffer: false,
+      usedAsPointer: false,
       virtualBases: [],
       size: cursor.getType()?.getSizeOf() ?? -1,
     } satisfies ClassEntry;
@@ -106,6 +108,8 @@ export class Context {
       methods: [],
       parameters: [],
       used: false,
+      usedAsBuffer: false,
+      usedAsPointer: false,
       virtualBases: [],
     };
     const entry = {
@@ -147,6 +151,8 @@ export class Context {
       methods: [],
       parameters: [],
       used: false,
+      usedAsBuffer: false,
+      usedAsPointer: false,
       virtualBases: [],
     });
   }
@@ -369,9 +375,9 @@ export class Context {
       throw new Error(`Could not find var '${importEntry.name}'`);
     }
 
-    const _result = visitVar(
+    visitVar(
       this,
-      found.cursor,
+      found,
     );
   }
 

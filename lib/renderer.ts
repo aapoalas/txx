@@ -4,6 +4,7 @@ import { renderEnum } from "./renderers/Enum.ts";
 import { renderFunction } from "./renderers/Function.ts";
 import { renderTypedef } from "./renderers/Typedef.ts";
 import { renderUnion } from "./renderers/Union.ts";
+import { renderVar } from "./renderers/Var.ts";
 import {
   AbsoluteFilePath,
   ImportMap,
@@ -67,6 +68,9 @@ export const renderFile = (
         break;
       case "union":
         renderUnion(memory, entry);
+        break;
+      case "var":
+        renderVar(memory, entry);
         break;
     }
   }

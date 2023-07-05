@@ -102,6 +102,8 @@ export interface ClassEntry extends BaseEntry {
   methods: ClassMethod[];
   size: number;
   virtualBases: BaseClassEntry[];
+  usedAsPointer: boolean;
+  usedAsBuffer: boolean;
 }
 
 export interface ClassConstructor {
@@ -152,6 +154,8 @@ export interface ClassTemplatePartialSpecialization {
   methods: ClassMethod[];
   parameters: TemplateParameter[];
   used: boolean;
+  usedAsPointer: boolean;
+  usedAsBuffer: boolean;
   virtualBases: BaseClassEntry[];
 }
 
@@ -226,6 +230,7 @@ export interface InlineClassTemplateTypeEntry {
   nsName?: string;
   parameters: (Parameter | TemplateParameter)[];
   template: ClassTemplateEntry;
+  specialization: ClassTemplatePartialSpecialization;
   type: CXType;
 }
 

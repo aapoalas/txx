@@ -45,6 +45,14 @@ export const renderClass = ({
   importsInTypesFile,
   typesFilePath,
 }: RenderData, entry: ClassEntry) => {
+  console.group(entry.nsName);
+  if (entry.usedAsBuffer) {
+    console.log("Is used as buffer");
+  }
+  if (entry.usedAsPointer) {
+    console.log("Is used as pointer");
+  }
+  console.groupEnd();
   const ClassPointer = `${entry.name}Pointer`;
   const ClassBuffer = `${entry.name}Buffer`;
   const ClassT = `${entry.name}T`;

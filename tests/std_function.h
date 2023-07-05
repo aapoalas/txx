@@ -11,3 +11,5 @@ class MyClass {
   BinaryCallback c_;
   TernaryCallback d_;
 };
+
+static int kValue = 3;
