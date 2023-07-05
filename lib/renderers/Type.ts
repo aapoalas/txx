@@ -381,10 +381,8 @@ export const renderTypeAsTS = (
   importMap: ImportMap,
   type: null | TypeEntry,
   {
-    typeOnly = true,
     intoJS = false,
   }: {
-    typeOnly?: boolean;
     intoJS?: boolean;
   } = {},
 ): string => {
@@ -454,7 +452,7 @@ export const renderTypeAsTS = (
       } else {
         const nameBuffer = `${type.pointee.name}Buffer`;
         importMap.set(
-          typeOnly ? `type ${nameBuffer}` : nameBuffer,
+          `type ${nameBuffer}`,
           classesFile(type.pointee.file),
         );
         dependencies.add(nameBuffer);
@@ -470,7 +468,7 @@ export const renderTypeAsTS = (
       ? `${type.name}Pointer`
       : `${type.name}Buffer`;
     importMap.set(
-      typeOnly || !type.usedAsBuffer && type.usedAsPointer
+      !type.usedAsBuffer && type.usedAsPointer
         ? `type ${name}`
         : name,
       classesFile(type.file),

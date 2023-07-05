@@ -89,15 +89,15 @@ export const renderFunctionReturnType = (
   resultType: null | TypeEntry,
   parameterStrings: string[],
 ) => {
-  const returnType = renderTypeAsFfi(
+  const result = renderTypeAsFfi(
     dependencies,
     importsInBindingsFile,
     resultType,
   );
   if (!isPassableByValue(resultType)) {
     importsInBindingsFile.set("buf", SYSTEM_TYPES);
-    parameterStrings.unshift(`buf(${resultType})`);
+    parameterStrings.unshift(`buf(${result})`);
     return `"void"`;
   }
-  return returnType;
+  return result;
 };

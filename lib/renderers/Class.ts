@@ -356,6 +356,7 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
     if (!isStaticMethod) {
       // Instance methods pass this parameter.
       parameterNames.unshift("this");
+      importsInBindingsFile.set("buf", SYSTEM_TYPES);
       parameterStrings.unshift(bufClassT);
     }
     const resultTsType = renderTypeAsTS(
@@ -363,10 +364,6 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
       importsInClassesFile,
       method.result,
       {
-        // If the return value is returned through a 0th buffer
-        // parameter then the result TS type is used as a constructor.
-        // Otherwise it is only used as a type.
-        typeOnly: !returnByValue,
         intoJS: true,
       },
     );
@@ -379,6 +376,9 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
     if (!returnByValue) {
       // Result returned by 0th buffer parameter, named "result".
       parameterNames.unshift("result");
+      if (method.result && typeof method.result === "object" && "file" in method.result) {
+        importsInClassesFile.set(resultTsType, classesFile(method.result.file));
+      }
       parameterTsTypes.push({
         name: "result",
         defaultValue: `new ${resultTsType}()`,
