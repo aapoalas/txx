@@ -139,7 +139,7 @@ export const getPlainTypeInfo = (
   }
 };
 
-export const isReturnedInRegisters = (entry: TypeEntry): boolean => {
+export const isPassedInRegisters = (entry: TypeEntry): boolean => {
   if (typeof entry === "string" || entry === null) {
     return true;
   }

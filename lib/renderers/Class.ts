@@ -26,9 +26,9 @@ import {
   createDummyRenderDataEntry,
   createRenderDataEntry,
   FFI,
+  isPassedInRegisters,
   isPointer,
   isPointerToStructLike,
-  isReturnedInRegisters,
   isStructLike,
   SYSTEM_TYPES,
   typesFile,
@@ -327,7 +327,7 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
     }
     if (
       method.result === null || typeof method.result === "string" ||
-      isReturnedInRegisters(method.result)
+      isPassedInRegisters(method.result)
     ) {
       const returnsStruct = isStructLike(method.result);
       const returnTsType = renderTypeAsTS(

@@ -22,6 +22,7 @@ import {
   getNamespacedName,
   getPlainTypeInfo,
   isInlineTemplateStruct,
+  isPassedInRegisters,
   isPointer,
   isStruct,
 } from "../utils.ts";
@@ -245,9 +246,20 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
       }
 
       if (isStruct(parameterType)) {
-        parameterType.usedAsBuffer = true;
+        if (isPassedInRegisters(parameterType)) {
+          // POD structs get passed as "struct" type.
+          parameterType.usedAsBuffer = true;
+        } else {
+          // Non-POD structs get passed as references even when
+          // the type definition calls for pass-by-value.
+          parameterType.usedAsPointer = true;
+        }
       } else if (isInlineTemplateStruct(parameterType)) {
-        parameterType.specialization.usedAsBuffer = true;
+        if (isPassedInRegisters(parameterType)) {
+          parameterType.specialization.usedAsBuffer = true;
+        } else {
+          parameterType.specialization.usedAsPointer = true;
+        }
       } else if (isPointer(parameterType)) {
         if (isStruct(parameterType.pointee)) {
           parameterType.pointee.usedAsPointer = true;
