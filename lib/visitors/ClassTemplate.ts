@@ -87,9 +87,6 @@ export const visitClassTemplateEntry = (
   partialSpecialization?: ClassTemplatePartialSpecialization,
 ): ClassTemplateEntry => {
   if (!classTemplateEntry.used) {
-    if (classTemplateEntry.name === "SharedPointer") {
-      console.log("HERE");
-    }
     classTemplateEntry.used = true;
     classTemplateEntry.cursor.visitChildren((gc) => {
       if (

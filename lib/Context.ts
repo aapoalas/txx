@@ -234,7 +234,6 @@ export class Context {
       }
     }
     if (!source) {
-      console.log(spec.getPrettyPrinted(), getCursorFileLocation(spec));
       throw new Error(
         `Could not find class template for ${getNamespacedName(cursor)}`,
       );
