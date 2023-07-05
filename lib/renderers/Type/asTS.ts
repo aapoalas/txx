@@ -3,6 +3,7 @@ import {
   classesFile,
   isFunction,
   isInlineTemplateStruct,
+  isPassableByValue,
   isStruct,
   isStructLike,
   typesFile,
@@ -42,6 +43,9 @@ export const renderTypeAsTS = (
       case "buffer":
       case "cstring":
       case "cstringArray":
+        if (intoJS) {
+          return "Deno.PointerValue";
+        }
         return "Uint8Array";
       default:
         throw new Error("Missing match arm");
@@ -145,11 +149,11 @@ export const renderTypeAsTS = (
     return "Deno.PointerValue";
   } else if (type.kind === "class") {
     // If class is only seen used as a pointer, then always expect it as a pointer.
-    const name = !type.usedAsBuffer && type.usedAsPointer
-      ? `${type.name}Pointer`
-      : `${type.name}Buffer`;
+    const usePointer = isPassableByValue(type) &&
+      (intoJS || !type.usedAsBuffer && type.usedAsPointer);
+    const name = usePointer ? `${type.name}Pointer` : `${type.name}Buffer`;
     importMap.set(
-      !type.usedAsBuffer && type.usedAsPointer ? `type ${name}` : name,
+      usePointer ? `type ${name}` : name,
       classesFile(type.file),
     );
     dependencies.add(name);
