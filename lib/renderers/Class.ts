@@ -796,7 +796,7 @@ const renderClassMethod = (
       }`
     ).join(", ")
   }): ${result} {
-${bodyLines.map((line) => `  ${line}`).join("\n")}
+  ${bodyLines.join("\n  ")}
 }
 `;
 };
