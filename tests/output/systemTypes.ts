@@ -6,14 +6,17 @@ export const union3 = <const T, const U, const V>(
 
 export const union2 = <const T, const U>(a: T, _b: U): T | U => a;
 
-export const ptr = (_: unknown) => "pointer" as const;
+declare const PtrBrand: unique symbol;
+export type Ptr<T> = "pointer" & { [PtrBrand]: T };
+export const ptr = <T>(_: T) => "pointer" as Ptr<T>;
 
-export const func = (_?: unknown) => "function" as const;
-
-export const buf = (_: unknown) => "buffer" as const;
+declare const FuncBrand: unique symbol;
+export type Func<T> = "function" & { [FuncBrand]: T };
+export const func = <T>(_: T) => "function" as Func<T>;
 
 declare const BufBrand: unique symbol;
 export type Buf<T> = "buffer" & { [BufBrand]: T };
+export const buf = <T>(_: T) => "buffer" as Buf<T>;
 
 export const _Nocopy_typesT = union3(
   { "struct": ["u64", "u64"] },

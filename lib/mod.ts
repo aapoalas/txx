@@ -144,7 +144,12 @@ export const build = (configuration: ExportConfiguration) => {
 
   for (const entry of entriesNeededInSystem) {
     const result = renderSystemFileConstant(entry);
-    if (result) {
+    if (
+      result &&
+      !entriesInSystemTypesFile.some((entry) =>
+        entry.contents === result.contents
+      )
+    ) {
       entriesInSystemTypesFile.push(result);
     }
   }

@@ -119,32 +119,30 @@ export const handleImports = (
 
 export const renderSystemFileConstant = (constant: string): RenderDataEntry => {
   let contents: string;
+  let names = [constant];
   switch (constant) {
     case "buf":
-      contents = `export const buf = (_: unknown) => "buffer" as const;
-`;
-      break;
     case "type Buf":
+      names = ["buf", "type Buf"];
       contents = `declare const BufBrand: unique symbol;
 export type Buf<T> = "buffer" & { [BufBrand]: T };
+export const buf = <T>(_: T) => "buffer" as Buf<T>;
 `;
       break;
     case "ptr":
-      contents = `export const ptr = (_: unknown) => "pointer" as const;
-`;
-      break;
     case "type Ptr":
+      names = ["ptr", "type Ptr"];
       contents = `declare const PtrBrand: unique symbol;
 export type Ptr<T> = "pointer" & { [PtrBrand]: T };
+export const ptr = <T>(_: T) => "pointer" as Ptr<T>;
 `;
       break;
     case "func":
-      contents = `export const func = (_?: unknown) => "function" as const;
-`;
-      break;
     case "type Func":
+      names = ["func", "type Func"];
       contents = `declare const FuncBrand: unique symbol;
 export type Func<T> = "function" & { [FuncBrand]: T };
+export const func = <T>(_: T) => "function" as Func<T>;
 `;
       break;
     case "union2":
@@ -191,6 +189,6 @@ export type Func<T> = "function" & { [FuncBrand]: T };
   return {
     contents,
     dependencies: [],
-    names: [constant],
+    names,
   };
 };
