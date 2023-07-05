@@ -164,9 +164,10 @@ export const renderTypeAsTS = (
     }
     return "Deno.PointerValue";
   } else if (type.kind === "class") {
-    // If class is only seen used as a pointer, then always expect it as a pointer.
-    const usePointer = isPassableByValue(type) &&
-      (intoJS || !type.usedAsBuffer && type.usedAsPointer);
+    // If class is only seen used as a pointer and we're not being returned
+    // into JS, then always expect it as a pointer.
+    const usePointer = !intoJS && isPassableByValue(type) &&
+      !type.usedAsBuffer && type.usedAsPointer;
     const name = usePointer ? `${type.name}Pointer` : `${type.name}Buffer`;
     importMap.set(
       usePointer ? `type ${name}` : name,

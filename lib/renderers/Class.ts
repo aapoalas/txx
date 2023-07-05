@@ -406,6 +406,10 @@ const createMethodOverloadName = (
       return createParameterOverloadName(diff);
     },
   ).filter(Boolean);
+  if (method.name === "set" && paramDifferenceNames.length === 1) {
+    // Save a few key strokes when possible.
+    return `${method.name}${paramDifferenceNames[0]}`;
+  }
   return `${method.name}With${paramDifferenceNames.join("And")}`;
 };
 
