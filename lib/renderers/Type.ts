@@ -468,9 +468,7 @@ export const renderTypeAsTS = (
       ? `${type.name}Pointer`
       : `${type.name}Buffer`;
     importMap.set(
-      !type.usedAsBuffer && type.usedAsPointer
-        ? `type ${name}`
-        : name,
+      !type.usedAsBuffer && type.usedAsPointer ? `type ${name}` : name,
       classesFile(type.file),
     );
     dependencies.add(name);
