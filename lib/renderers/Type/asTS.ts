@@ -1,6 +1,7 @@
 import { ImportMap, TypedefEntry, TypeEntry } from "../../types.d.ts";
 import {
   classesFile,
+  isCharVector,
   isFunction,
   isInlineTemplateStruct,
   isPassableByValue,
@@ -58,11 +59,14 @@ export const renderTypeAsTS = (
     return name;
   } else if (type.kind === "typedef") {
     const name = type.name;
-    if (isStructLike(type)) {
+    if (isStructLike(type.target)) {
       const nameBuffer = `${name}Buffer`;
       importMap.set(nameBuffer, classesFile(type.file));
       dependencies.add(nameBuffer);
       return nameBuffer;
+    } else if (intoJS && isCharVector(type.target)) {
+      // Special handling for cstring and cstringArray and type aliases of those.
+      return "Deno.PointerValue";
     }
     importMap.set(`type ${name}`, typesFile((type as TypedefEntry).file));
     dependencies.add(name);

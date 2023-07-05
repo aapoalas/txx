@@ -151,7 +151,7 @@ export const isPassableByValue = (
       entry.cursor.kind === CXCursorKind.CXCursor_TypedefDecl ||
       entry.cursor.kind === CXCursorKind.CXCursor_TypeAliasDecl
     ) {
-      return isTypedefReturnedInRegisters(
+      return isTypePassableByValue(
         entry.cursor.getTypedefDeclarationOfUnderlyingType()!,
       );
     } else if (entry.cursor.kind === CXCursorKind.CXCursor_EnumDecl) {
@@ -163,7 +163,7 @@ export const isPassableByValue = (
       cursor.kind === CXCursorKind.CXCursor_ClassDecl ||
       cursor.kind === CXCursorKind.CXCursor_StructDecl
     ) {
-      return isClassPassedInRegisters(cursor);
+      return isClassPassableByValue(cursor);
     }
     if (!canonicalType) {
       return false;
@@ -174,16 +174,16 @@ export const isPassableByValue = (
       return false;
     }
     const canonicalType = entry.type.getCanonicalType();
-    return isTypedefReturnedInRegisters(canonicalType);
+    return isTypePassableByValue(canonicalType);
   }
 };
 
-const isClassPassedInRegisters = (
+const isClassPassableByValue = (
   cursor: CXCursor,
 ): boolean => {
   const result = cursor.visitChildren((child) => {
     if (child.kind === CXCursorKind.CXCursor_CXXBaseSpecifier) {
-      if (!isClassPassedInRegisters(child.getDefinition()!)) {
+      if (!isClassPassableByValue(child.getDefinition()!)) {
         return CXChildVisitResult.CXChildVisit_Break;
       }
     } else if (
@@ -191,7 +191,7 @@ const isClassPassedInRegisters = (
         (child.isCopyConstructor() || child.isMoveConstructor()) ||
       child.kind === CXCursorKind.CXCursor_Destructor
     ) {
-      // TODO: Should check if all constructors are deleted.
+      // TODO: Should check if all constructors are deleted. Requires libclang 16.
       return CXChildVisitResult.CXChildVisit_Break;
     } else if (
       child.kind === CXCursorKind.CXCursor_CXXMethod && child.isVirtual()
@@ -207,11 +207,23 @@ const isClassPassedInRegisters = (
   return true;
 };
 
-const isTypedefReturnedInRegisters = (
+const isTypePassableByValue = (
   type: CXType,
 ): boolean => {
   if (type.kind === CXTypeKind.CXType_Record) {
-    return isClassPassedInRegisters(type.getTypeDeclaration()!);
+    return isClassPassableByValue(type.getTypeDeclaration()!);
+  } else if (type.kind === CXTypeKind.CXType_Typedef) {
+    const canonicalType = type.getCanonicalType();
+    if (!canonicalType.equals(type)) {
+      return isTypePassableByValue(canonicalType);
+    }
+  } else if (type.kind === CXTypeKind.CXType_Elaborated) {
+    return isTypePassableByValue(type.getNamedType()!);
+  } else if (type.kind === CXTypeKind.CXType_Unexposed) {
+    const canonicalType = type.getCanonicalType();
+    if (!canonicalType.equals(type)) {
+      return isTypePassableByValue(canonicalType);
+    }
   }
   return true;
 };
@@ -354,6 +366,12 @@ export const isStructOrTypedefStruct = (
   isStruct(entry) ||
   isTypedef(entry) &&
     (isInlineStruct(entry.target) || isStructOrTypedefStruct(entry.target));
+
+export const isCharVector = (
+  entry: null | "self" | TypeEntry,
+): entry is "cstring" | "cstringArray" | TypedefEntry =>
+  entry === "cstring" || entry === "cstringArray" ||
+  isTypedef(entry) && isCharVector(entry.target);
 
 export const isTypedef = (
   entry: null | "self" | TypeEntry,
