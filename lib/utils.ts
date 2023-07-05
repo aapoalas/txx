@@ -26,6 +26,7 @@ import type {
   RenderDataEntry,
   TypedefEntry,
   TypeEntry,
+  UnionEntry,
 } from "./types.d.ts";
 
 export const SYSTEM_BINDINGS = "#SYSTEM_B" as const;
@@ -164,7 +165,7 @@ export const isPassedInRegisters = (entry: TypeEntry): boolean => {
       cursor.kind === CXCursorKind.CXCursor_ClassDecl ||
       cursor.kind === CXCursorKind.CXCursor_StructDecl
     ) {
-      return isClassReturnedInRegisters(cursor);
+      return isClassPassedInRegisters(cursor);
     }
     if (!canonicalType) {
       return false;
@@ -180,7 +181,7 @@ export const isPassedInRegisters = (entry: TypeEntry): boolean => {
   }
 };
 
-const isClassReturnedInRegisters = (
+const isClassPassedInRegisters = (
   cursor: CXCursor,
   type = cursor.getType()!,
 ): boolean => {
@@ -189,7 +190,7 @@ const isClassReturnedInRegisters = (
   }
   const result = cursor.visitChildren((child) => {
     if (child.kind === CXCursorKind.CXCursor_CXXBaseSpecifier) {
-      if (!isClassReturnedInRegisters(child.getDefinition()!)) {
+      if (!isClassPassedInRegisters(child.getDefinition()!)) {
         return CXChildVisitResult.CXChildVisit_Break;
       }
     } else if (
@@ -220,7 +221,7 @@ const isTypedefReturnedInRegisters = (
     return false;
   }
   if (type.kind === CXTypeKind.CXType_Record) {
-    return isClassReturnedInRegisters(type.getTypeDeclaration()!);
+    return isClassPassedInRegisters(type.getTypeDeclaration()!);
   }
   return true;
 };
@@ -361,6 +362,11 @@ export const isTypedef = (
   entry: null | "self" | TypeEntry,
 ): entry is TypedefEntry =>
   entry !== null && typeof entry === "object" && entry.kind === "typedef";
+
+export const isUnion = (
+  entry: null | "self" | TypeEntry,
+): entry is UnionEntry =>
+  entry !== null && typeof entry === "object" && entry.kind === "union";
 
 export const createRenderDataEntry = (
   names: string[] = [],

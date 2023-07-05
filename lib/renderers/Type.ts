@@ -101,6 +101,18 @@ export const renderTypeAsFfi = (
     } else if (
       type.pointee.kind === "pointer" || type.pointee.kind === "class"
     ) {
+      if (
+        type.pointee.kind === "class" && !type.pointee.usedAsBuffer &&
+        type.pointee.usedAsPointer
+      ) {
+        importMap.set("ptr", SYSTEM_TYPES);
+        return `ptr(${(renderTypeAsFfi(
+          dependencies,
+          importMap,
+          type.pointee,
+          templateNameReplaceMap,
+        ))})`;
+      }
       importMap.set("buf", SYSTEM_TYPES);
       return `buf(${(renderTypeAsFfi(
         dependencies,
@@ -412,8 +424,16 @@ export const renderTypeAsTS = (
     }
     return "Deno.PointerValue";
   } else if (type.kind === "class") {
-    const name = `${type.name}Buffer`;
-    importMap.set(typeOnly ? `type ${name}` : name, classesFile(type.file));
+    // If class is only seen used as a pointer, then always expect it as a pointer.
+    const name = !type.usedAsBuffer && type.usedAsPointer
+      ? `${type.name}Pointer`
+      : `${type.name}Buffer`;
+    importMap.set(
+      typeOnly || !type.usedAsBuffer && type.usedAsPointer
+        ? `type ${name}`
+        : name,
+      classesFile(type.file),
+    );
     dependencies.add(name);
     return name;
   } else if (

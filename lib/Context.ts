@@ -27,9 +27,11 @@ import {
   isConstantArray,
   isFunction,
   isInlineStruct,
+  isInlineTemplateStruct,
   isPointer,
   isStruct,
   isTypedef,
+  isUnion,
 } from "./utils.ts";
 import { visitClassEntry } from "./visitors/Class.ts";
 import { visitClassTemplateEntry } from "./visitors/ClassTemplate.ts";
@@ -184,9 +186,10 @@ export class Context {
     this.#useableEntries.push(entry);
   }
 
-  addFunction(name: string, cursor: CXCursor): void {
-    if (!cursor.isDefinition()) {
-      // Forward declaration
+  addFunction(cursor: CXCursor): void {
+    const name = cursor.getSpelling();
+    if (!name) {
+      // Anonymous function?
       return;
     }
 
@@ -365,6 +368,7 @@ export class Context {
 
     found.parameters = result.parameters;
     found.result = result.result;
+    found.used = true;
   }
 
   visitVar(importEntry: VarContent): void {
@@ -572,6 +576,9 @@ const replaceSelfReferentialFieldValues = (
     if (entry === source) {
       throw new Error("Class self-refers itself");
     }
+    if (typeof entry === "string" || !entry) {
+      return;
+    }
     if (isTypedef(entry)) {
       visitorCallback(entry.target);
     } else if (isPointer(entry)) {
@@ -589,6 +596,15 @@ const replaceSelfReferentialFieldValues = (
       entry.fields.forEach((field) => visitorCallback(field.type));
     } else if (isConstantArray(entry)) {
       visitorCallback(entry.element);
+    } else if (isUnion(entry)) {
+      entry.fields.forEach(visitorCallback);
+    } else if (isInlineTemplateStruct(entry)) {
+      entry.parameters.forEach((param) =>
+        param.kind === "parameter" ? visitorCallback(param.type) : null
+      );
+      entry.specialization.fields.forEach((field) =>
+        visitorCallback(field.type)
+      );
     }
   };
   const cb = (field: ClassField) => {

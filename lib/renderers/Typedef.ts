@@ -239,7 +239,7 @@ const renderInlineTemplateTarget = (
     `export class ${nameBuffer} extends Uint8Array {
   constructor(arg?: ArrayBufferLike | number) {
     if (typeof arg === "undefined") {
-      super(${BUFFER_SIZE})
+      super(${BUFFER_SIZE});
       return;
     } else if (typeof arg === "number") {
       if (!Number.isFinite(arg) || arg < ${BUFFER_SIZE}) {
@@ -357,7 +357,7 @@ const renderInlineStructOrConstantArray = (
     `export class ${nameBuffer} extends Uint8Array {
   constructor(arg?: ArrayBufferLike | number) {
     if (typeof arg === "undefined") {
-      super(${BUFFER_SIZE})
+      super(${BUFFER_SIZE});
       return;
     } else if (typeof arg === "number") {
       if (!Number.isFinite(arg) || arg < ${BUFFER_SIZE}) {

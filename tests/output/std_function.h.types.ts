@@ -1,4 +1,4 @@
-import { buf, functionT } from "./systemTypes.ts";
+import { buf, functionT, ptr } from "./systemTypes.ts";
 
 export const NULLARY_CALLBACK_SIZE = 32 as const;
 export const NullaryCallbackT = functionT({ parameters: [], result: "void" });
@@ -29,7 +29,7 @@ export type BinaryCallbackPointer = NonNullable<Deno.PointerValue> & {
 
 export const TERNARY_CALLBACK_SIZE = 32 as const;
 export const TernaryCallbackT = functionT({
-  parameters: ["i32", "i32", buf(MyClassT)],
+  parameters: ["i32", "i32", buf("self")],
   result: "void",
 });
 declare const TernaryCallback: unique symbol;
@@ -49,4 +49,46 @@ export const MyClassT = {
 declare const MyClass: unique symbol;
 export type MyClassPointer = NonNullable<Deno.PointerValue> & {
   [MyClass]: unknown;
+};
+
+export const POD_CLASS_SIZE = 4 as const;
+export const PodClassT = {
+  struct: [
+    "i32", // data_, offset 0, size 4, align 4
+  ],
+} as const;
+declare const PodClass: unique symbol;
+export type PodClassPointer = NonNullable<Deno.PointerValue> & {
+  [PodClass]: unknown;
+};
+
+export const OTHER_POD_CLASS_SIZE = 4 as const;
+export const OtherPodClassT = {
+  struct: [
+    "i32", // data_, offset 0, size 4, align 4
+  ],
+} as const;
+declare const OtherPodClass: unique symbol;
+export type OtherPodClassPointer = NonNullable<Deno.PointerValue> & {
+  [OtherPodClass]: unknown;
+};
+
+export const NON_POD_CLASS_SIZE = 4 as const;
+export const NonPodClassT = {
+  struct: [
+    "i32", // data_, offset 0, size 4, align 4
+  ],
+} as const;
+declare const NonPodClass: unique symbol;
+export type NonPodClassPointer = NonNullable<Deno.PointerValue> & {
+  [NonPodClass]: unknown;
+};
+
+export const ClassCallbackT = {
+  parameters: [OtherPodClassT, NonPodClassT, ptr(NonPodClassT)],
+  result: "void",
+} as const;
+declare const ClassCallback_: unique symbol;
+export type ClassCallback = NonNullable<Deno.PointerValue> & {
+  [ClassCallback_]: unknown;
 };

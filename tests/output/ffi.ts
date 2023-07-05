@@ -5,3 +5,5 @@ const lib = Deno.dlopen("FFIPATH", {
 });
 
 export const MyClass__Constructor = lib.symbols.MyClass__Constructor;
+export const PodClass__create = lib.symbols.PodClass__create;
+export const tryFunction = lib.symbols.tryFunction;

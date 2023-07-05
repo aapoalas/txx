@@ -33,6 +33,7 @@ import {
   SYSTEM_TYPES,
   typesFile,
 } from "../utils.ts";
+import { renderFunctionExport } from "./Function.ts";
 import { renderTypeAsFfi, renderTypeAsTS } from "./Type.ts";
 
 export const renderClass = ({
@@ -456,7 +457,7 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
   const classDefinition = `export class ${ClassBuffer} extends ${BaseClass} {
   constructor(arg?: ArrayBufferLike | number) {
     if (typeof arg === "undefined") {
-      super(${CLASS_SIZE})
+      super(${CLASS_SIZE});
       return;
     } else if (typeof arg === "number") {
       if (!Number.isFinite(arg) || arg < ${CLASS_SIZE}) {
@@ -758,19 +759,6 @@ const classHasVirtualMethod = (cursor: CXCursor): boolean => {
   );
 };
 
-const renderFunctionExport = (
-  exportName: string,
-  mangling: string,
-  parameters: string[],
-  result: string,
-) =>
-  `export const ${exportName} = {
-  name: "${mangling}",
-  parameters: [${parameters.join(", ")}],
-  result: ${result},
-} as const;
-`;
-
 interface ClassParameterRenderData {
   name: string;
   type?: string;
@@ -792,7 +780,7 @@ const renderClassMethod = (
   }${methodName}(${
     parameters.map((param) =>
       `${param.name}${param.type ? `: ${param.type}` : ""}${
-        param.defaultValue ? ` ${param.defaultValue}` : ""
+        param.defaultValue ? ` = ${param.defaultValue}` : ""
       }`
     ).join(", ")
   }): ${result} {

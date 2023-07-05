@@ -10,19 +10,25 @@ export const renderFunction = (
   const dependencies = new Set<string>();
   const namespace__method = entry.nsName.replaceAll(SEP, "__");
   bindings.add(namespace__method);
-  const data = `
-export const ${namespace__method} = {
-  name: "${entry.mangling}",
-  parameters: [${
-    entry.parameters.map((x) =>
-      renderTypeAsFfi(dependencies, importsInBindingsFile, x.type)
-    )
-      .join(
-        ", ",
-      )
-  }],
-  result: ${renderTypeAsFfi(dependencies, importsInBindingsFile, entry.result)},
+  entriesInBindingsFile.push(createDummyRenderDataEntry(renderFunctionExport(
+    namespace__method,
+    entry.mangling,
+    entry.parameters.map((param) =>
+      renderTypeAsFfi(dependencies, importsInBindingsFile, param.type)
+    ),
+    renderTypeAsFfi(dependencies, importsInBindingsFile, entry.result),
+  )));
+};
+
+export const renderFunctionExport = (
+  exportName: string,
+  mangling: string,
+  parameters: string[],
+  result: string,
+) =>
+  `export const ${exportName} = {
+  name: "${mangling}",
+  parameters: [${parameters.join(", ")}],
+  result: ${result},
 } as const;
 `;
-  entriesInBindingsFile.push(createDummyRenderDataEntry(data));
-};
