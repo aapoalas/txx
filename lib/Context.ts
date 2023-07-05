@@ -13,8 +13,8 @@ import {
   EnumEntry,
   FunctionContent,
   FunctionEntry,
-  TypedefEntry,
   TypeEntry,
+  TypedefEntry,
   UnionEntry,
   UseableEntry,
   VarContent,
@@ -31,7 +31,7 @@ import {
   isPointer,
   isStruct,
   isTypedef,
-  isUnion,
+  isUnion
 } from "./utils.ts";
 import { visitClassEntry } from "./visitors/Class.ts";
 import { visitClassTemplateEntry } from "./visitors/ClassTemplate.ts";
@@ -63,6 +63,7 @@ export class Context {
       // Anonymous struct
       return;
     }
+
     const nameTemplatePart = getCursorNameTemplatePart(cursor);
     const nsName = this.#nsStack.length
       ? `${this.#nsStack.join("::")}${SEP}${name}${nameTemplatePart}`
@@ -338,16 +339,14 @@ export class Context {
     );
     if (hasChildren) {
       throw new Error(
-        `Unexpectedly found an unregistered class entry with children '${
-          getNamespacedName(cursor)
+        `Unexpectedly found an unregistered class entry with children '${getNamespacedName(cursor)
         }'`,
       );
     }
     const specialized = cursor.getSpecializedTemplate();
     if (!specialized || specialized.equals(cursor)) {
       throw new Error(
-        `Unexpectedly found an unregistered class that did not specialize a template '${
-          getNamespacedName(cursor)
+        `Unexpectedly found an unregistered class that did not specialize a template '${getNamespacedName(cursor)
         }'`,
       );
     }

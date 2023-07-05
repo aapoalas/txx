@@ -43,7 +43,30 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
     ? type.getSpelling().substring(6)
     : type.getSpelling();
   if (kind === CXTypeKind.CXType_Typedef) {
-    return visitTypedefEntry(context, type.getTypeDeclaration()!);
+    const declaration = type.getTypeDeclaration();
+    const canonicalType = type.getCanonicalType();
+    if (!declaration) {
+      if (type.equals(canonicalType)) {
+        throw new Error(
+          "Type equals canonical type and declaration cannot be found",
+        );
+      }
+      return visitType(context, canonicalType);
+    }
+    const found = context.findTypedefByCursor(declaration);
+    if (found) {
+      return visitTypedefEntry(context, type.getTypeDeclaration()!);
+    }
+    const underlyingType = declaration.getTypedefDeclarationOfUnderlyingType();
+    if (!underlyingType) {
+      if (type.equals(canonicalType)) {
+        throw new Error(
+          "Type equals canonical type and underlying type cannot be found",
+        );
+      }
+      return visitType(context, canonicalType);
+    }
+    return visitType(context, underlyingType);
   } else if (kind === CXTypeKind.CXType_Unexposed) {
     const canonicalType = type.getCanonicalType();
     if (canonicalType.kind !== CXTypeKind.CXType_Unexposed) {
@@ -144,6 +167,26 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
     } else if (name.startsWith("type-parameter-")) {
       const isSpread = name.endsWith("...");
       let mutName = isSpread ? name.substring(0, name.length - 3) : name;
+      const isRvalueRef = mutName.endsWith(" &&");
+      const isLvalueRef = mutName.endsWith(" &");
+      if (isRvalueRef) {
+        mutName = mutName.substring(0, mutName.length - 3);
+      } else if (isLvalueRef) {
+        mutName = mutName.substring(0, mutName.length - 2);
+      }
+      return {
+        name: mutName,
+        kind: "<T>",
+        isSpread,
+        isRef: isLvalueRef || isRvalueRef,
+      } satisfies TemplateParameter;
+    }
+    const canonicalName = canonicalType.getSpelling();
+    if (canonicalName.startsWith("type-parameter-")) {
+      const isSpread = canonicalName.endsWith("...");
+      let mutName = isSpread
+        ? canonicalName.substring(0, canonicalName.length - 3)
+        : canonicalName;
       const isRvalueRef = mutName.endsWith(" &&");
       const isLvalueRef = mutName.endsWith(" &");
       if (isRvalueRef) {

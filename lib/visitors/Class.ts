@@ -330,7 +330,8 @@ export const visitBaseClass = (
     const targc = type.getNumberOfTemplateArguments();
     for (let i = 0; i < targc; i++) {
       const targType = type.getTemplateArgumentAsType(i)!;
-      if (targType.kind === CXTypeKind.CXType_Unexposed) {
+      const kind = targType.kind;
+      if (kind === CXTypeKind.CXType_Unexposed) {
         // Template parameter
         const targName = targType.getSpelling();
         parameters.push(
@@ -344,6 +345,32 @@ export const visitBaseClass = (
             isRef: targName.includes(" &"),
           } satisfies TemplateParameter,
         );
+      } else if (
+        kind === CXTypeKind.CXType_Bool ||
+        kind === CXTypeKind.CXType_Char_U ||
+        kind === CXTypeKind.CXType_UChar ||
+        kind === CXTypeKind.CXType_UShort ||
+        kind === CXTypeKind.CXType_UInt ||
+        kind === CXTypeKind.CXType_ULong ||
+        kind === CXTypeKind.CXType_ULongLong ||
+        kind === CXTypeKind.CXType_Char_S ||
+        kind === CXTypeKind.CXType_SChar ||
+        kind === CXTypeKind.CXType_Short ||
+        kind === CXTypeKind.CXType_Int ||
+        kind === CXTypeKind.CXType_Long ||
+        kind === CXTypeKind.CXType_LongLong ||
+        kind === CXTypeKind.CXType_Float ||
+        kind === CXTypeKind.CXType_Double ||
+        kind === CXTypeKind.CXType_NullPtr
+      ) {
+        parameters.push({
+          comment: null,
+          kind: "parameter",
+          name: targType.getSpelling(),
+          type: visitType(context, targType)!,
+        });
+      } else {
+        throw new Error("Missing template argument kind handling");
       }
     }
     return {
@@ -353,7 +380,12 @@ export const visitBaseClass = (
         kind: "inline class<T>",
         parameters,
         template: baseClass,
-        specialization: getClassSpecializationByCursor(baseClass, definition),
+        specialization: getClassSpecializationByCursor(
+          baseClass,
+          definition.kind === CXCursorKind.CXCursor_StructDecl
+            ? definition.getSpecializedTemplate()!
+            : definition,
+        ),
         type,
         name: definition.getSpelling(),
         nsName: getNamespacedName(definition),

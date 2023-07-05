@@ -29,7 +29,9 @@ import {
   isPassedInRegisters,
   isPointer,
   isPointerToStructLike,
+  isStruct,
   isStructLike,
+  isStructOrTypedefStruct,
   SYSTEM_TYPES,
   typesFile,
 } from "../utils.ts";
@@ -83,28 +85,24 @@ export const renderClass = ({
   const inheritedPointers: string[] = [];
 
   for (const base of entry.bases) {
-    const BaseT = `${base.name}T`;
-    if (fields.length === 0) {
+    const BaseT = renderTypeAsFfi(dependencies, importsInTypesFile, base);
+    if (
+      fields.length === 0 && (isStruct(base) || isStructOrTypedefStruct(base))
+    ) {
       // Pointer to class with inheritance is only usable
-      // as the base class if the base class
+      // as the base class if the base class is concrete and
       // is the very first field in the inheriting class
       // and thus holds the vtable pointer.
       const BasePointer = `${base.name}Pointer`;
       inheritedPointers.push(BasePointer);
-      if (base.kind === "inline class<T>") {
-        importsInTypesFile.set(BasePointer, typesFile(base.template.file));
-      } else {
-        importsInTypesFile.set(BasePointer, typesFile(base.file));
-      }
+      importsInTypesFile.set(BasePointer, typesFile(base.file));
     }
-    let baseType: CXType;
     if (base.kind === "inline class<T>") {
       importsInTypesFile.set(BaseT, typesFile(base.template.file));
-      baseType = base.template.cursor.getType()!;
     } else {
       importsInTypesFile.set(BaseT, typesFile(base.file));
-      baseType = base.cursor.getType()!;
     }
+    const baseType: CXType = base.cursor.getType()!;
 
     if (!baseType) {
       continue;
@@ -131,10 +129,12 @@ export const renderClass = ({
   });
 
   for (const base of entry.virtualBases) {
-    const BaseT = `${base.name}T`;
-    if (fields.length === 0) {
+    const BaseT = renderTypeAsFfi(dependencies, importsInTypesFile, base);
+    if (
+      fields.length === 0 && (isStruct(base) || isStructOrTypedefStruct(base))
+    ) {
       // Pointer to class with inheritance is only usable
-      // as the base class if the base class
+      // as the base class if the base class is concrete and
       // is the very first field in the inheriting class
       // and thus holds the vtable pointer.
       const BasePointer = `${base.name}Pointer`;

@@ -358,6 +358,13 @@ export const isPointerToStructLike = (
 } =>
   isPointer(entry) && (entry.pointee === "self" || isStructLike(entry.pointee));
 
+export const isStructOrTypedefStruct = (
+  entry: null | "self" | TypeEntry,
+): entry is ClassEntry | TypedefEntry =>
+  isStruct(entry) ||
+  isTypedef(entry) &&
+    (isInlineStruct(entry.target) || isStructOrTypedefStruct(entry.target));
+
 export const isTypedef = (
   entry: null | "self" | TypeEntry,
 ): entry is TypedefEntry =>

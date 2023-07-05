@@ -1,5 +1,4 @@
 import pascalCase from "https://deno.land/x/case@2.1.1/pascalCase.ts";
-import { CXType } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
 import {
   AbsoluteTypesFilePath,
   ClassTemplateEntry,
@@ -10,6 +9,8 @@ import {
 import {
   createRenderDataEntry,
   isPointer,
+  isStruct,
+  isStructOrTypedefStruct,
   SYSTEM_TYPES,
   typesFile,
 } from "../utils.ts";
@@ -108,23 +109,23 @@ const renderSpecialization = (
   const inheritedPointers: string[] = [];
   const fields: string[] = [];
   for (const base of specialization.bases) {
-    const BaseT = `${base.name}T`;
-    let baseType: CXType | null;
+    const BaseT = renderTypeAsFfi(dependencies, importsInTypesFile, base);
     let baseTypeSource: AbsoluteTypesFilePath;
     if (base.kind === "inline class<T>") {
       baseTypeSource = typesFile(base.template.file);
-      baseType = base.template.cursor.getType();
     } else {
       baseTypeSource = typesFile(base.file);
-      baseType = base.cursor.getType();
     }
+    const baseType = base.cursor.getType();
     if (!baseType) {
       // Zero-sized base type; this just provides eg. methods.
       continue;
     }
-    if (fields.length === 0) {
+    if (
+      fields.length === 0 && (isStruct(base) || isStructOrTypedefStruct(base))
+    ) {
       // Pointer to class with inheritance is only usable
-      // as the base class if the base class
+      // as the base class if the base class is concrete and
       // is the very first field in the inheriting class
       // and thus holds the vtable pointer.
       const BasePointer = `${base.name}Pointer`;
@@ -162,23 +163,23 @@ const renderSpecialization = (
   }
 
   for (const base of specialization.virtualBases) {
-    const BaseT = `${base.name}T`;
-    let baseType: CXType | null;
+    const BaseT = renderTypeAsFfi(dependencies, importsInTypesFile, base);
     let baseTypeSource: AbsoluteTypesFilePath;
     if (base.kind === "inline class<T>") {
       baseTypeSource = typesFile(base.template.file);
-      baseType = base.template.cursor.getType();
     } else {
       baseTypeSource = typesFile(base.file);
-      baseType = base.cursor.getType();
     }
+    const baseType = base.cursor.getType();
     if (!baseType) {
       // Zero-sized base type; this just provides eg. methods.
       continue;
     }
-    if (fields.length === 0) {
+    if (
+      fields.length === 0 && (isStruct(base) || isStructOrTypedefStruct(base))
+    ) {
       // Pointer to class with inheritance is only usable
-      // as the base class if the base class
+      // as the base class if the base class is concrete and
       // is the very first field in the inheriting class
       // and thus holds the vtable pointer.
       const BasePointer = `${base.name}Pointer`;
@@ -214,7 +215,7 @@ const renderSpecialization = (
   }
   return { struct: [
     ${fields.join("\n    ")}
-] };
+] } as const;
 }`;
 };
 
