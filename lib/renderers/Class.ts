@@ -58,12 +58,11 @@ export const renderClass = ({
   typesFilePath,
 }: RenderData, entry: ClassEntry) => {
   const ClassPointer = `${entry.name}Pointer`;
-  const ClassBuffer = `${entry.name}Buffer`;
+  const ClassBuffer = `${entry.name}Buffer` as const;
   const ClassT = `${entry.name}T`;
   const lib__Class = entry.nsName.replaceAll(SEP, "__");
-  const CLASS_SIZE = `${constantCase(entry.name)}_SIZE`;
+  const CLASS_SIZE = `${constantCase(entry.name)}_SIZE` as const;
   const dependencies = new Set<string>();
-  importsInClassesFile.set(CLASS_SIZE, typesFilePath);
 
   const classType = entry.cursor.getType()!;
   const classSize = classType.getSizeOf();
@@ -123,6 +122,13 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
   );
   dependencies.clear();
   const bufferEntryItems: string[] = [];
+  if (classSize !== 1 || entry.fields.length > 0) {
+    importsInClassesFile.set(CLASS_SIZE, typesFilePath);
+    bufferEntryItems.push(renderClassBufferConstructor(
+      ClassBuffer,
+      CLASS_SIZE,
+    ));
+  }
   const methodRenderOptions: MethodRenderOptions = {
     bindings,
     bufferEntryItems,
@@ -176,28 +182,30 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
       entry.bases.map((x) => x.name).join(" and "),
     );
   }
-  const classDefinition = `export class ${ClassBuffer} extends ${BaseClass} {
-  constructor(arg?: ArrayBufferLike | number) {
-    if (typeof arg === "undefined") {
-      super(${CLASS_SIZE});
-      return;
-    } else if (typeof arg === "number") {
-      if (!Number.isFinite(arg) || arg < ${CLASS_SIZE}) {
-        throw new Error(
-          "Invalid construction of ${ClassBuffer}: Size is not finite or is too small",
-        );
-      }
-      super(arg);
-      return;
-    }
-    if (arg.byteLength < ${CLASS_SIZE}) {
-      throw new Error(
-        "Invalid construction of ${ClassBuffer}: Buffer size is too small",
-      );
-    }
-    super(arg);
+  if (bufferEntryItems.length === 0) {
+    // No buildable contents.
+    return;
   }
-
+  if (
+    classSize === 1 && entry.fields.length === 0 &&
+    entry.methods.every((method) => method.cursor.isStatic()) &&
+    BaseClass === "Uint8Array"
+  ) {
+    // Class of only statics
+    const ClassObject = `${entry.name}`;
+    entriesInClassesFile.push(
+      createRenderDataEntry(
+        [ClassObject],
+        [],
+        `export class ${ClassObject} {
+  ${bufferEntryItems.join("\n  ")}
+}
+`,
+      ),
+    );
+    return;
+  }
+  const classDefinition = `export class ${ClassBuffer} extends ${BaseClass} {
   ${bufferEntryItems.join("\n  ")}
 }
 `;
@@ -942,3 +950,29 @@ const renderClassMethodBinding = (
 }
 `;
 };
+
+export const renderClassBufferConstructor = (
+  ClassBuffer: `${string}Buffer`,
+  CLASS_SIZE: `${string}_SIZE`,
+) =>
+  `constructor(arg?: ArrayBufferLike | number) {
+  if (typeof arg === "undefined") {
+    super(${CLASS_SIZE});
+    return;
+  } else if (typeof arg === "number") {
+    if (!Number.isFinite(arg) || arg < ${CLASS_SIZE}) {
+      throw new Error(
+        "Invalid construction of ${ClassBuffer}: Size is not finite or is too small",
+      );
+    }
+    super(arg);
+    return;
+  }
+  if (arg.byteLength < ${CLASS_SIZE}) {
+    throw new Error(
+      "Invalid construction of ${ClassBuffer}: Buffer size is too small",
+    );
+  }
+  super(arg);
+}
+`;

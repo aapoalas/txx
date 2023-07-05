@@ -8,7 +8,7 @@ import {
 export const NULLARY_CALLBACK_SIZE = 32 as const;
 export const NullaryCallbackT = functionT({ parameters: [], result: "void" });
 export type NullaryCallbackPointer = functionPointer<
-  { parameters: []; result: "void" }
+  Deno.UnsafeCallbackDefinition<[], "void">
 >;
 
 export const UNARY_CALLBACK_SIZE = 32 as const;
@@ -17,7 +17,7 @@ export const UnaryCallbackT = functionT({
   result: "void",
 });
 export type UnaryCallbackPointer = functionPointer<
-  { parameters: ["i32"]; result: "void" }
+  Deno.UnsafeCallbackDefinition<["i32"], "void">
 >;
 
 export const BINARY_CALLBACK_SIZE = 32 as const;
@@ -26,7 +26,7 @@ export const BinaryCallbackT = functionT({
   result: "void",
 });
 export type BinaryCallbackPointer = functionPointer<
-  { parameters: ["i32", "i32"]; result: "void" }
+  Deno.UnsafeCallbackDefinition<["i32", "i32"], "void">
 >;
 
 export const TERNARY_CALLBACK_SIZE = 32 as const;
@@ -35,7 +35,7 @@ export const TernaryCallbackT = functionT({
   result: "void",
 });
 export type TernaryCallbackPointer = functionPointer<
-  { parameters: ["i32", "i32", Buf<"self">]; result: "void" }
+  Deno.UnsafeCallbackDefinition<["i32", "i32", Buf<"self">], "void">
 >;
 
 export const MY_CLASS_SIZE = 128 as const;

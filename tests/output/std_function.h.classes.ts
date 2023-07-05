@@ -10,8 +10,11 @@ import {
   TERNARY_CALLBACK_SIZE,
   UNARY_CALLBACK_SIZE,
 } from "./std_function.h.types.ts";
+import { functionBuffer } from "./systemClasses.ts";
+import { type Buf } from "./systemTypes.ts";
 
-export class NullaryCallbackBuffer extends Uint8Array {
+export class NullaryCallbackBuffer
+  extends functionBuffer<Deno.UnsafeCallbackDefinition<[], "void">> {
   constructor(arg?: ArrayBufferLike | number) {
     if (typeof arg === "undefined") {
       super(NULLARY_CALLBACK_SIZE);
@@ -34,7 +37,8 @@ export class NullaryCallbackBuffer extends Uint8Array {
   }
 }
 
-export class UnaryCallbackBuffer extends Uint8Array {
+export class UnaryCallbackBuffer
+  extends functionBuffer<Deno.UnsafeCallbackDefinition<["i32"], "void">> {
   constructor(arg?: ArrayBufferLike | number) {
     if (typeof arg === "undefined") {
       super(UNARY_CALLBACK_SIZE);
@@ -57,7 +61,9 @@ export class UnaryCallbackBuffer extends Uint8Array {
   }
 }
 
-export class BinaryCallbackBuffer extends Uint8Array {
+export class BinaryCallbackBuffer extends functionBuffer<
+  Deno.UnsafeCallbackDefinition<["i32", "i32"], "void">
+> {
   constructor(arg?: ArrayBufferLike | number) {
     if (typeof arg === "undefined") {
       super(BINARY_CALLBACK_SIZE);
@@ -80,7 +86,9 @@ export class BinaryCallbackBuffer extends Uint8Array {
   }
 }
 
-export class TernaryCallbackBuffer extends Uint8Array {
+export class TernaryCallbackBuffer extends functionBuffer<
+  Deno.UnsafeCallbackDefinition<["i32", "i32", Buf<"self">], "void">
+> {
   constructor(arg?: ArrayBufferLike | number) {
     if (typeof arg === "undefined") {
       super(TERNARY_CALLBACK_SIZE);

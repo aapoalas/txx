@@ -28,6 +28,7 @@ import {
   renderTypeAsFfiBindingTypes,
   renderTypeAsTS,
 } from "./Type.ts";
+import { renderClassBufferConstructor } from "./Class.ts";
 
 export const renderTypedef = (
   renderData: RenderData,
@@ -234,33 +235,15 @@ const renderInlineTemplateTarget = (
   const nameT = `${name}T`;
   const namePointer = `${name}Pointer`;
   const dependencies = new Set<string>();
-  const BUFFER_SIZE = `${constantCase(name)}_SIZE`;
+  const BUFFER_SIZE = `${constantCase(name)}_SIZE` as const;
   importsInClassesFile.set(BUFFER_SIZE, typesFilePath);
-  const nameBuffer = `${name}Buffer`;
+  const BaseBuffer = renderTypeAsTS(dependencies, importsInClassesFile, target);
+  const nameBuffer = `${name}Buffer` as const;
   const classesEntry = createRenderDataEntry(
     [nameBuffer],
     [],
-    `export class ${nameBuffer} extends Uint8Array {
-  constructor(arg?: ArrayBufferLike | number) {
-    if (typeof arg === "undefined") {
-      super(${BUFFER_SIZE});
-      return;
-    } else if (typeof arg === "number") {
-      if (!Number.isFinite(arg) || arg < ${BUFFER_SIZE}) {
-        throw new Error(
-          "Invalid construction of ${nameBuffer}: Size is not finite or is too small",
-        );
-      }
-      super(arg);
-      return;
-    }
-    if (arg.byteLength < ${BUFFER_SIZE}) {
-      throw new Error(
-        "Invalid construction of ${nameBuffer}: Buffer size is too small",
-      );
-    }
-    super(arg);
-  }
+    `export class ${nameBuffer} extends ${BaseBuffer} {
+  ${renderClassBufferConstructor(nameBuffer, BUFFER_SIZE)}
 }
 `,
   );
@@ -363,36 +346,16 @@ const renderInlineStructOrConstantArray = (
   target: InlineClassTypeEntry | ConstantArrayTypeEntry,
 ) => {
   const nameT = `${name}T`;
-  const nameBuffer = `${name}Buffer`;
+  const nameBuffer = `${name}Buffer` as const;
   const namePointer = `${name}Pointer`;
   const dependencies = new Set<string>();
-  const BUFFER_SIZE = `${constantCase(name)}_SIZE`;
+  const BUFFER_SIZE = `${constantCase(name)}_SIZE` as const;
   importsInClassesFile.set(BUFFER_SIZE, typesFilePath);
   const classesEntry = createRenderDataEntry(
     [nameBuffer],
     [],
     `export class ${nameBuffer} extends Uint8Array {
-  constructor(arg?: ArrayBufferLike | number) {
-    if (typeof arg === "undefined") {
-      super(${BUFFER_SIZE});
-      return;
-    } else if (typeof arg === "number") {
-      if (!Number.isFinite(arg) || arg < ${BUFFER_SIZE}) {
-        throw new Error(
-          "Invalid construction of ${nameBuffer}: Size is not finite or is too small",
-        );
-      }
-      super(arg);
-      return;
-    }
-    if (arg.byteLength < ${BUFFER_SIZE}) {
-      throw new Error(
-        "Invalid construction of ${nameBuffer}: Buffer size is too small",
-      );
-    }
-    super(arg);
-  }
-}
+${renderClassBufferConstructor(nameBuffer, BUFFER_SIZE)}
 `,
   );
   entriesInClassesFile.push(
