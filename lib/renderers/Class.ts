@@ -230,11 +230,11 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
     bufferEntryItems.push(
       renderClassMethod(
         Constructor,
-        method.parameters.map((param) =>
-          `${param.name}: ${
-            renderTypeAsTS(dependencies, importsInClassesFile, param.type)
-          }`
-        ).concat(`self = new ${ClassBuffer}()`),
+        method.parameters.map((param): ClassParameterRenderData => ({
+          name: param.name,
+          type: renderTypeAsTS(dependencies, importsInClassesFile, param.type),
+        }))
+          .concat({ name: "self", defaultValue: `new ${ClassBuffer}()` }),
         ClassBuffer,
         `${lib__Class}__${Constructor}(${
           ["self"].concat(method.parameters.map((param) => param.name))
@@ -289,7 +289,7 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
       bufferEntryItems.push(
         renderClassMethod(
           "delete",
-          [`self: ${ClassPointer}`],
+          [{ name: "self", type: ClassPointer }],
           "void",
           `${lib__Class}__Delete(self);`,
           {
@@ -363,11 +363,10 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
       entriesInBindingsFile.push(createDummyRenderDataEntry(methodBindingData));
       bufferEntryItems.push(renderClassMethod(
         renameForbiddenMethods(methodName, method),
-        method.parameters.map((param) =>
-          `${param.name}: ${
-            renderTypeAsTS(dependencies, importsInClassesFile, param.type)
-          }`
-        ),
+        method.parameters.map((param): ClassParameterRenderData => ({
+          name: param.name,
+          type: renderTypeAsTS(dependencies, importsInClassesFile, param.type),
+        })),
         `${maybeNullishString}${returnTsType}`,
         `${returnString}${typeAssertString}`,
         {
@@ -404,11 +403,14 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
       bufferEntryItems.push(
         renderClassMethod(
           renameForbiddenMethods(methodName, method),
-          method.parameters.map((param) =>
-            `${param.name}: ${
-              renderTypeAsTS(dependencies, importsInClassesFile, param.type)
-            }`
-          ).concat(`result = new ${resultJsType}()`),
+          method.parameters.map((param): ClassParameterRenderData => ({
+            name: param.name,
+            type: renderTypeAsTS(
+              dependencies,
+              importsInClassesFile,
+              param.type,
+            ),
+          })).concat({ name: "result", type: `new ${resultJsType}()` }),
           resultJsType,
           `${lib__Class}__${methodName}(${
             (method.cursor.isStatic() ? ["result"] : ["result", "this"]).concat(
@@ -764,9 +766,15 @@ const renderFunctionExport = (
 } as const;
 `;
 
+interface ClassParameterRenderData {
+  name: string;
+  type?: string;
+  defaultValue?: string;
+}
+
 const renderClassMethod = (
   methodName: string,
-  parameters: string[],
+  parameters: ClassParameterRenderData[],
   result: string,
   body: string,
   options: {
@@ -776,7 +784,13 @@ const renderClassMethod = (
 ) => {
   return `  ${options.static ? "static " : ""}${
     options.overridden ? "override " : ""
-  }${methodName}(${parameters.join(", ")}): ${result} {
+  }${methodName}(${
+    parameters.map((param) =>
+      `${param.name}${param.type ? `: ${param.type}` : ""}${
+        param.defaultValue ? ` ${param.defaultValue}` : ""
+      }`
+    ).join(", ")
+  }): ${result} {
   ${body}
 }
 `;
