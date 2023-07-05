@@ -424,12 +424,15 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
       );
     }
   }
-  const BaseClass = entry.bases.length
-    ? `${entry.bases[0].name}Buffer`
-    : "Uint8Array";
-  if (
-    entry.bases.length
-  ) {
+  let BaseClass = "Uint8Array";
+  if (entry.bases.length > 0) {
+    BaseClass = `${entry.bases[0].name}Buffer`;
+    importsInClassesFile.set(
+      BaseClass,
+      classesFile(entry.bases[0].file),
+    );
+  } else if (entry.fields.length === 0 && entry.virtualBases.length > 0) {
+    BaseClass = `${entry.virtualBases[0].name}Buffer`;
     importsInClassesFile.set(
       BaseClass,
       classesFile(entry.bases[0].file),
@@ -465,7 +468,8 @@ export type ${ClassPointer} = ${inheritedPointers.join(" & ")};
     super(arg);
   }
 
-${bufferEntryItems.join("\n")}}
+${bufferEntryItems.join("\n")}
+}
 `;
   entriesInClassesFile.push(
     createRenderDataEntry([ClassBuffer], [BaseClass], classDefinition),
