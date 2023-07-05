@@ -250,6 +250,41 @@ const createMethodOverloadName = (
     overloads.length === 1 &&
     method.parameters.length > overloads[0].parameters.length
   ) {
+    const otherMethod = overloads[0];
+    const parameterDifferences = otherMethod.parameters.reduce<
+      ([Parameter, Parameter] | null)[]
+    >((acc, param, index) => {
+      if (acc.length > 0 && acc.at(-1) !== null) {
+        // Found inequal type or name
+        return acc;
+      } else if (
+        !typesAreEqual(param.type, method.parameters[index].type) ||
+        param.name !== method.parameters[index].name
+      ) {
+        // Inequal type or name.
+        acc.push([param, method.parameters[index]]);
+      } else {
+        // Equal type and name, ignorable.
+        acc.push(null);
+      }
+      return acc;
+    }, []);
+    if (parameterDifferences.length > 0 && parameterDifferences.some(Boolean)) {
+      const [otherParam, ownParam] = parameterDifferences.find(Boolean)!;
+      if (
+        otherParam.name !== ownParam.name &&
+        !method.name.toLowerCase().includes(ownParam.name.toLowerCase())
+      ) {
+        // If the first parameter difference between our two methods is between their parameter
+        // names then use the longer method's differing parameter name as the discriminant.
+        // Except, if the parameter name is already in the method name: This avoids generating
+        // useless names like "setDataWithData".
+        return `${method.name}With${pascalCase(ownParam.name)}`;
+      }
+      return `${method.name}With${
+        createParameterOverloadName(ownParam, ownParam.type)
+      }`;
+    }
     return `${method.name}With${
       method.parameters.slice(overloads[0].parameters.length).map(
         (param) => createParameterOverloadName(param, param.type),
