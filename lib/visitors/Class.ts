@@ -195,7 +195,16 @@ const visitConstructor = (
   // Constructors always take a 0th parameter
   // pointing to the ClassBuffer.
   entry.usedAsBuffer = true;
-
+  entry.bases.forEach(base => {
+    if (base.kind === "class") {
+      base.usedAsBuffer = true;
+    }
+  });
+  entry.virtualBases.forEach(base => {
+    if (base.kind === "class") {
+      base.usedAsBuffer = true;
+    }
+  });
   const { parameters } = visitFunctionCursor(context, cursor);
   entry.constructors.push({
     parameters,

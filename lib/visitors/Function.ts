@@ -51,6 +51,16 @@ export const visitFunctionCursor = (
     if (isStruct(type) && !isPassableByValue(type)) {
       // Pass-by-value struct as a parameter only accepts Uint8Arrays in Deno.
       type.usedAsBuffer = true;
+      type.bases.forEach(base => {
+        if (base.kind === "class") {
+          base.usedAsBuffer = true;
+        }
+      });
+      type.virtualBases.forEach(base => {
+        if (base.kind === "class") {
+          base.usedAsBuffer = true;
+        }
+      });
     } else if (isInlineTemplateStruct(type) && !isPassableByValue(type)) {
       if (!type.specialization) {
         type.specialization = type.template.defaultSpecialization!;
@@ -82,6 +92,16 @@ export const visitFunctionCursor = (
       // by-ref struct takes an extra Uint8Array parameter.
       // Either way, the struct ends up as a buffer.
       result.usedAsBuffer = true;
+      result.bases.forEach(base => {
+        if (base.kind === "class") {
+          base.usedAsBuffer = true;
+        }
+      });
+      result.virtualBases.forEach(base => {
+        if (base.kind === "class") {
+          base.usedAsBuffer = true;
+        }
+      });
     } else if (isInlineTemplateStruct(result)) {
       // Same thing as above: One way or another the template
       // instance struct ends up as a buffer.
@@ -92,6 +112,16 @@ export const visitFunctionCursor = (
     } else if (isPointer(result)) {
       if (isStruct(result.pointee)) {
         result.pointee.usedAsPointer = true;
+        result.pointee.bases.forEach(base => {
+          if (base.kind === "class") {
+            base.usedAsPointer = true;
+          }
+        });
+        result.pointee.virtualBases.forEach(base => {
+          if (base.kind === "class") {
+            base.usedAsPointer = true;
+          }
+        });
       } else if (isInlineTemplateStruct(result.pointee)) {
         if (!result.pointee.specialization) {
           result.pointee.specialization = result.pointee.template

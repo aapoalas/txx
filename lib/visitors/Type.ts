@@ -166,8 +166,28 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
         // If it is pass-by-ref then it comes to Deno as a `Deno.PointerObject`.
         if (isPassableByValue(parameterType)) {
           parameterType.usedAsBuffer = true;
+          parameterType.bases.forEach(base => {
+            if (base.kind === "class") {
+              base.usedAsBuffer = true;
+            }
+          });
+          parameterType.virtualBases.forEach(base => {
+            if (base.kind === "class") {
+              base.usedAsBuffer = true;
+            }
+          });
         } else {
           parameterType.usedAsPointer = true;
+          parameterType.bases.forEach(base => {
+            if (base.kind === "class") {
+              base.usedAsPointer = true;
+            }
+          });
+          parameterType.virtualBases.forEach(base => {
+            if (base.kind === "class") {
+              base.usedAsPointer = true;
+            }
+          });
         }
       } else if (
         isInlineTemplateStruct(parameterType)
@@ -188,6 +208,16 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
         // Pointers to struct types come to Deno as `Deno.PointerObject`.
         if (isStruct(parameterType.pointee)) {
           parameterType.pointee.usedAsPointer = true;
+          parameterType.pointee.bases.forEach(base => {
+            if (base.kind === "class") {
+              base.usedAsPointer = true;
+            }
+          });
+          parameterType.pointee.virtualBases.forEach(base => {
+            if (base.kind === "class") {
+              base.usedAsPointer = true;
+            }
+          });
         } else if (isInlineTemplateStruct(parameterType.pointee)) {
           if (!parameterType.pointee.specialization) {
             parameterType.pointee.specialization = parameterType.pointee
@@ -215,6 +245,16 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
       // by-ref struct takes an extra Uint8Array parameter.
       // Either way, the struct ends up as a buffer.
       result.usedAsBuffer = true;
+      result.bases.forEach(base => {
+        if (base.kind === "class") {
+          base.usedAsBuffer = true;
+        }
+      });
+      result.virtualBases.forEach(base => {
+        if (base.kind === "class") {
+          base.usedAsBuffer = true;
+        }
+      });
     } else if (isInlineTemplateStruct(result)) {
       // Same thing as above: One way or another the template
       // instance struct ends up as a buffer.
@@ -225,6 +265,16 @@ export const visitType = (context: Context, type: CXType): null | TypeEntry => {
     } else if (isPointer(result)) {
       if (isStruct(result.pointee)) {
         result.pointee.usedAsPointer = true;
+        result.pointee.bases.forEach(base => {
+          if (base.kind === "class") {
+            base.usedAsPointer = true;
+          }
+        });
+        result.pointee.virtualBases.forEach(base => {
+          if (base.kind === "class") {
+            base.usedAsPointer = true;
+          }
+        });
       } else if (isInlineTemplateStruct(result.pointee)) {
         if (!result.pointee.specialization) {
           result.pointee.specialization = result.pointee.template
