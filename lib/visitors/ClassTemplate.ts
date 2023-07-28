@@ -12,8 +12,9 @@ import {
   TypeEntry,
 } from "../types.d.ts";
 import { getNamespacedName } from "../utils.ts";
-import { visitBaseClass } from "./Class.ts";
+import { markClassUsedAsBufferOrPointer, visitBaseClass } from "./Class.ts";
 import { createInlineTypeEntry, visitType } from "./Type.ts";
+import { markTypedefUsedAsBufferOrPointer } from "./Typedef.ts";
 
 export const visitClassTemplateCursor = (
   context: Context,
@@ -487,5 +488,39 @@ export const renameClassTemplateSpecializations = (
   }
   usedSpecializations.forEach((spec) => {
     spec.name = `${entry.name}${spec.parameters.map((x) => x.name).join("")}`;
+  });
+};
+
+export const markTemplateInstanceUsedAsBufferOrPointer = (
+  entry: InlineClassTemplateTypeEntry,
+  buffer: boolean,
+): void => {
+  if (!entry.specialization) {
+    return;
+  }
+  if (buffer) {
+    entry.specialization.usedAsBuffer = true;
+  } else {
+    entry.specialization.usedAsPointer = true;
+  }
+  entry.specialization.bases.forEach((base) => {
+    switch (base.kind) {
+      case "class":
+        return markClassUsedAsBufferOrPointer(base, buffer);
+      case "inline class<T>":
+        return markTemplateInstanceUsedAsBufferOrPointer(base, buffer);
+      case "typedef":
+        return markTypedefUsedAsBufferOrPointer(base, buffer);
+    }
+  });
+  entry.specialization.virtualBases.forEach((base) => {
+    switch (base.kind) {
+      case "class":
+        return markClassUsedAsBufferOrPointer(base, buffer);
+      case "inline class<T>":
+        return markTemplateInstanceUsedAsBufferOrPointer(base, buffer);
+      case "typedef":
+        return markTypedefUsedAsBufferOrPointer(base, buffer);
+    }
   });
 };

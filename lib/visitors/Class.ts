@@ -15,9 +15,13 @@ import {
   TypeEntry,
 } from "../types.d.ts";
 import { getFileNameFromCursor, getNamespacedName } from "../utils.ts";
-import { getClassSpecializationByCursor } from "./ClassTemplate.ts";
+import {
+  getClassSpecializationByCursor,
+  markTemplateInstanceUsedAsBufferOrPointer,
+} from "./ClassTemplate.ts";
 import { visitFunctionCursor } from "./Function.ts";
 import { visitType } from "./Type.ts";
+import { markTypedefUsedAsBufferOrPointer } from "./Typedef.ts";
 
 const PLAIN_METHOD_NAME_REGEX = /^[\w_]+$/i;
 
@@ -194,17 +198,8 @@ const visitConstructor = (
 
   // Constructors always take a 0th parameter
   // pointing to the ClassBuffer.
-  entry.usedAsBuffer = true;
-  entry.bases.forEach(base => {
-    if (base.kind === "class") {
-      base.usedAsBuffer = true;
-    }
-  });
-  entry.virtualBases.forEach(base => {
-    if (base.kind === "class") {
-      base.usedAsBuffer = true;
-    }
-  });
+  markClassUsedAsBufferOrPointer(entry, true);
+
   const { parameters } = visitFunctionCursor(context, cursor);
   entry.constructors.push({
     parameters,
@@ -408,4 +403,35 @@ export const visitBaseClass = (
   } else {
     return { baseClass, isVirtualBase };
   }
+};
+
+export const markClassUsedAsBufferOrPointer = (
+  entry: ClassEntry,
+  usedAsBuffer: boolean,
+): void => {
+  if (usedAsBuffer) {
+    entry.usedAsBuffer = true;
+  } else {
+    entry.usedAsPointer = true;
+  }
+  entry.bases.forEach((base) => {
+    switch (base.kind) {
+      case "class":
+        return markClassUsedAsBufferOrPointer(base, usedAsBuffer);
+      case "inline class<T>":
+        return markTemplateInstanceUsedAsBufferOrPointer(base, usedAsBuffer);
+      case "typedef":
+        return markTypedefUsedAsBufferOrPointer(base, usedAsBuffer);
+    }
+  });
+  entry.virtualBases.forEach((base) => {
+    switch (base.kind) {
+      case "class":
+        return markClassUsedAsBufferOrPointer(base, usedAsBuffer);
+      case "inline class<T>":
+        return markTemplateInstanceUsedAsBufferOrPointer(base, usedAsBuffer);
+      case "typedef":
+        return markTypedefUsedAsBufferOrPointer(base, usedAsBuffer);
+    }
+  });
 };

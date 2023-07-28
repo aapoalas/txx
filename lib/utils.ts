@@ -307,7 +307,7 @@ export const isPrimitive = (entry: null | "self" | TypeEntry): boolean => {
     return isPrimitive(entry.target);
   }
   return false;
-}
+};
 
 export const isStructLike = (
   entry: null | "self" | TypeEntry,

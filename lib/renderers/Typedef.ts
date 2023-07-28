@@ -23,12 +23,12 @@ import {
   isTypedef,
   typesFile,
 } from "../utils.ts";
+import { renderClassBufferConstructor } from "./Class.ts";
 import {
   renderTypeAsFfi,
   renderTypeAsFfiBindingTypes,
   renderTypeAsTS,
 } from "./Type.ts";
-import { renderClassBufferConstructor } from "./Class.ts";
 
 export const renderTypedef = (
   renderData: RenderData,

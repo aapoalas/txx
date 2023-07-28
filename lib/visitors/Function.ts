@@ -7,6 +7,8 @@ import {
   isPointer,
   isStruct,
 } from "../utils.ts";
+import { markClassUsedAsBufferOrPointer } from "./Class.ts";
+import { markTemplateInstanceUsedAsBufferOrPointer } from "./ClassTemplate.ts";
 import { visitType } from "./Type.ts";
 
 export const visitFunctionCursor = (
@@ -50,22 +52,12 @@ export const visitFunctionCursor = (
 
     if (isStruct(type) && !isPassableByValue(type)) {
       // Pass-by-value struct as a parameter only accepts Uint8Arrays in Deno.
-      type.usedAsBuffer = true;
-      type.bases.forEach(base => {
-        if (base.kind === "class") {
-          base.usedAsBuffer = true;
-        }
-      });
-      type.virtualBases.forEach(base => {
-        if (base.kind === "class") {
-          base.usedAsBuffer = true;
-        }
-      });
+      markClassUsedAsBufferOrPointer(type, true);
     } else if (isInlineTemplateStruct(type) && !isPassableByValue(type)) {
       if (!type.specialization) {
         type.specialization = type.template.defaultSpecialization!;
       }
-      type.specialization.usedAsBuffer = true;
+      markTemplateInstanceUsedAsBufferOrPointer(type, true);
     }
 
     parameters.push({
@@ -91,43 +83,23 @@ export const visitFunctionCursor = (
       // By-value struct returns as a Uint8Array,
       // by-ref struct takes an extra Uint8Array parameter.
       // Either way, the struct ends up as a buffer.
-      result.usedAsBuffer = true;
-      result.bases.forEach(base => {
-        if (base.kind === "class") {
-          base.usedAsBuffer = true;
-        }
-      });
-      result.virtualBases.forEach(base => {
-        if (base.kind === "class") {
-          base.usedAsBuffer = true;
-        }
-      });
+      markClassUsedAsBufferOrPointer(result, true);
     } else if (isInlineTemplateStruct(result)) {
       // Same thing as above: One way or another the template
       // instance struct ends up as a buffer.
       if (!result.specialization) {
         result.specialization = result.template.defaultSpecialization!;
       }
-      result.specialization.usedAsBuffer = true;
+      markTemplateInstanceUsedAsBufferOrPointer(result, true);
     } else if (isPointer(result)) {
       if (isStruct(result.pointee)) {
-        result.pointee.usedAsPointer = true;
-        result.pointee.bases.forEach(base => {
-          if (base.kind === "class") {
-            base.usedAsPointer = true;
-          }
-        });
-        result.pointee.virtualBases.forEach(base => {
-          if (base.kind === "class") {
-            base.usedAsPointer = true;
-          }
-        });
+        markClassUsedAsBufferOrPointer(result.pointee, false);
       } else if (isInlineTemplateStruct(result.pointee)) {
         if (!result.pointee.specialization) {
           result.pointee.specialization = result.pointee.template
             .defaultSpecialization!;
         }
-        result.pointee.specialization.usedAsPointer = true;
+        markTemplateInstanceUsedAsBufferOrPointer(result.pointee, false);
       }
     }
 
