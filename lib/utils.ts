@@ -297,6 +297,18 @@ export const classesFile = (
 export const typesFile = (filePath: AbsoluteFilePath): AbsoluteTypesFilePath =>
   `${filePath}.types.ts` as const;
 
+export const isPrimitive = (entry: null | "self" | TypeEntry): boolean => {
+  if (entry === null) {
+    // Consider "void" as non-primitive so `*const void` becomes a pointer and not a buffer.
+    return false;
+  } else if (typeof entry === "string") {
+    return entry !== "self";
+  } else if (isTypedef(entry)) {
+    return isPrimitive(entry.target);
+  }
+  return false;
+}
+
 export const isStructLike = (
   entry: null | "self" | TypeEntry,
 ): entry is

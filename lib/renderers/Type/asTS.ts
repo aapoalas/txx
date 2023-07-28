@@ -5,6 +5,7 @@ import {
   isFunction,
   isInlineTemplateStruct,
   isPassableByValue,
+  isPrimitive,
   isStruct,
   isStructLike,
   typesFile,
@@ -161,6 +162,8 @@ export const renderTypeAsTS = (
       }
     } else if (isFunction(type.pointee)) {
       return renderTypeAsTS(dependencies, importMap, type.pointee);
+    } else if (isPrimitive(type.pointee)) {
+      return "Uint8Array";
     }
     return "Deno.PointerValue";
   } else if (type.kind === "class") {
