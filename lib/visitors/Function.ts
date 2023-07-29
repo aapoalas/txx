@@ -10,6 +10,7 @@ import {
 import { markClassUsedAsBufferOrPointer } from "./Class.ts";
 import { markTemplateInstanceUsedAsBufferOrPointer } from "./ClassTemplate.ts";
 import { visitType } from "./Type.ts";
+import { CXCursorKind } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
 
 export const visitFunctionCursor = (
   context: Context,
@@ -25,6 +26,17 @@ export const visitFunctionCursor = (
       );
     }
     const name = arg.getSpelling();
+    let defaultValue: undefined | null | CXCursor;
+    arg.visitChildren((paramchild) => {
+      if (paramchild.kind === CXCursorKind.CXCursor_DeclRefExpr) {
+        defaultValue = paramchild;
+      } else if (
+        paramchild.kind === CXCursorKind.CXCursor_CXXNullPtrLiteralExpr
+      ) {
+        defaultValue = null;
+      }
+      return 2;
+    });
     const paramType = arg.getType();
     if (!paramType) {
       throw new Error(
@@ -65,6 +77,7 @@ export const visitFunctionCursor = (
       comment: null,
       name,
       type,
+      defaultValue,
     });
   }
   const rvType = cursor.getResultType();

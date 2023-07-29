@@ -14,7 +14,7 @@ import {
   Parameter,
   PointerTypeEntry,
   TemplateParameter,
-  TypeEntry
+  TypeEntry,
 } from "../types.d.ts";
 import {
   getFileNameFromCursor,
@@ -23,7 +23,7 @@ import {
   isInlineTemplateStruct,
   isPassableByValue,
   isPointer,
-  isStruct
+  isStruct,
 } from "../utils.ts";
 import { markClassUsedAsBufferOrPointer } from "./Class.ts";
 import {

@@ -121,6 +121,11 @@ export const renderSystemFileConstant = (constant: string): RenderDataEntry => {
   let contents: string;
   let names = [constant];
   switch (constant) {
+    case "NULLBUF":
+      names = ["NULLBUF"];
+      contents = `export const NULLBUF = new Uint8Array();
+`;
+      break;
     case "buf":
     case "type Buf":
       names = ["buf", "type Buf"];

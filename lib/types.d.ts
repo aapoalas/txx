@@ -34,7 +34,7 @@ export interface ExportConfiguration {
   /**
    * Determines the folder into which output files are generated.
    */
-  outputPath: AbsoluteFilePath;
+  outputPath: null | AbsoluteFilePath;
   /**
    * Determines which C++ classes and others are considered "entry points"
    * into the headers. Only these entries and anything they depend on will
@@ -199,6 +199,7 @@ export interface Parameter {
   comment: null | string;
   name: string;
   type: TypeEntry;
+  defaultValue?: null | CXCursor;
 }
 
 export interface ConstantArrayTypeEntry {

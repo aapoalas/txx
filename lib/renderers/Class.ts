@@ -5,6 +5,7 @@ import {
 import {
   CXChildVisitResult,
   CXCursorKind,
+  CXTypeKind,
 } from "https://deno.land/x/libclang@1.0.0-beta.8/include/typeDefinitions.ts";
 import { CXCursor } from "https://deno.land/x/libclang@1.0.0-beta.8/mod.ts";
 import { SEP } from "../Context.ts";
@@ -33,6 +34,7 @@ import {
   FFI,
   isInlineTemplateStruct,
   isPassableByValue,
+  isPointer,
   isPointerToStructLike,
   isStruct,
   isStructLike,
@@ -403,7 +405,14 @@ const createMethodOverloadName = (
         return pascalCase(diff.name);
       }
       // Create a type-based name.
-      return createParameterOverloadName(diff);
+      const res = createParameterOverloadName(diff, diff.type, true);
+      if (
+        method.name === "set" && isPointer(diff.type) &&
+        isStruct(diff.type.pointee)
+      ) {
+        console.log(res);
+      }
+      return res;
     },
   ).filter(Boolean);
   if (method.name === "set" && paramDifferenceNames.length === 1) {
@@ -455,6 +464,7 @@ const typesAreEqual = (a: null | TypeEntry, b: null | TypeEntry): boolean => {
 const createParameterOverloadName = (
   param: Parameter,
   type: TypeEntry = param.type,
+  forceTypeName = false,
 ): string => {
   if (typeof type === "string") {
     return pascalCase(type);
@@ -464,7 +474,7 @@ const createParameterOverloadName = (
         "Method parameter replaced with self reference, this should not happen",
       );
     }
-    return createParameterOverloadName(param, type.pointee);
+    return createParameterOverloadName(param, type.pointee, forceTypeName);
   } else if (type.kind === "enum") {
     return pascalCase(
       type.name,
@@ -472,6 +482,9 @@ const createParameterOverloadName = (
   } else if (type.kind === "function" || type.kind === "fn") {
     return pascalCase(param.name);
   } else if (type.kind === "class") {
+    if (forceTypeName) {
+      return pascalCase(type.name);
+    }
     return pascalCase(param.name);
   } else if (type.kind === "typedef") {
     return pascalCase(type.name);
@@ -695,10 +708,9 @@ const renderClassConstructor = (
     parameterStrings.push(
       renderFunctionParameter(dependencies, importsInBindingsFile, param),
     );
-    parameterRenderData.push({
-      name: param.name,
-      type: renderTypeAsTS(dependencies, importsInClassesFile, param.type),
-    });
+    parameterRenderData.push(
+      renderParameterData(dependencies, importsInClassesFile, param),
+    );
   }
   parameterRenderData.push({
     name: "self",
@@ -814,9 +826,11 @@ const renderClassMethod = (
   }: MethodRenderOptions,
   method: ClassMethod,
 ) => {
+  const isStatic = method.cursor.isStatic();
   const overloads = entry.methods.filter((otherMethod) =>
     otherMethod !== method &&
-    otherMethod.name === method.name
+    otherMethod.name === method.name &&
+    otherMethod.cursor.isStatic() === isStatic
   );
 
   if (
@@ -845,10 +859,7 @@ const renderClassMethod = (
   );
   const parameterTsTypes = method.parameters.map((
     param,
-  ): ClassParameterRenderData => ({
-    name: param.name,
-    type: renderTypeAsTS(dependencies, importsInClassesFile, param.type),
-  }));
+  ) => renderParameterData(dependencies, importsInClassesFile, param));
   if (!isStaticMethod) {
     // Instance methods pass this parameter.
     parameterNames.unshift("this");
@@ -1015,3 +1026,46 @@ export const renderClassBufferConstructor = (
   super(arg);
 }
 `;
+
+const renderParameterData = (
+  dependencies: Set<string>,
+  importsInClassesFile: ImportMap,
+  param: Parameter,
+): ClassParameterRenderData => {
+  const name = param.name;
+  const type = renderTypeAsTS(dependencies, importsInClassesFile, param.type);
+  const defaultValue = renderParameterDefaultValue(
+    importsInClassesFile,
+    type,
+    param.defaultValue,
+  );
+  return {
+    name,
+    type,
+    defaultValue,
+  };
+};
+
+const renderParameterDefaultValue = (
+  importsInClassesFile: ImportMap,
+  typeString: string,
+  defaultValue: undefined | null | CXCursor,
+): undefined | string => {
+  if (defaultValue === undefined) {
+    return;
+  } else if (defaultValue === null) {
+    if (typeString.endsWith("Buffer")) {
+      importsInClassesFile.set("NULLBUF", SYSTEM_TYPES);
+      return `NULLBUF as ${typeString}`;
+    }
+    return `null`;
+  } else if (defaultValue.getType()?.kind === CXTypeKind.CXType_Enum) {
+    // TODO: This is quite dirty: We just trust (and know) that rendering the enum type has
+    // created a type-only import.
+    importsInClassesFile.set(
+      typeString,
+      importsInClassesFile.get(`type ${typeString}`)!,
+    );
+    return `${typeString}.${defaultValue.getSpelling()}`;
+  }
+};

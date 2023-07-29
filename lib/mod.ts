@@ -41,6 +41,7 @@ import {
 
 export const build = (configuration: ExportConfiguration) => {
   if (
+    configuration.outputPath &&
     configuration.basePath.startsWith(configuration.outputPath)
   ) {
     throw new Error(
@@ -169,6 +170,11 @@ export const build = (configuration: ExportConfiguration) => {
     for (const [key, value] of outsideFile.importsInTypesFile) {
       importsInSystemTypesFile.set(key, value);
     }
+  }
+
+  if (configuration.outputPath === null) {
+    // Don't output, just test.
+    return;
   }
 
   sortRenderDataEntries(entriesInSystemClassesFile);
