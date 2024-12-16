@@ -244,9 +244,15 @@ const gatherEntries = (context: Context, parentCursor: CXCursor) =>
     switch (cursor.kind) {
       case CXCursorKind.CXCursor_ClassTemplate:
         context.addClassTemplate(cursor);
+        context.pushToNamespaceStack(cursor.getSpelling());
+        gatherEntries(context, cursor);
+        context.popFromNamespaceStack();
         break;
       case CXCursorKind.CXCursor_ClassTemplatePartialSpecialization:
         context.addClassTemplatePartialSpecialization(cursor);
+        context.pushToNamespaceStack(cursor.getSpelling());
+        gatherEntries(context, cursor);
+        context.popFromNamespaceStack();
         break;
       case CXCursorKind.CXCursor_FunctionDecl:
         context.addFunction(cursor);

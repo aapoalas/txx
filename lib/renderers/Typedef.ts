@@ -39,6 +39,7 @@ export const renderTypedef = (
     target,
   } = entry;
   if (!target) {
+    return;
     throw new Error("Void typedef");
   }
 

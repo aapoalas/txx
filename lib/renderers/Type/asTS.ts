@@ -203,6 +203,7 @@ export const renderTypeAsTS = (
   } else if (type.kind === "union") {
     throw new Error("Unexpected union entry");
   } else if (type.kind === "<T>") {
+    return `${type.name}`;
     throw new Error("Unexpected template parameter entry");
   } else {
     throw new Error(

@@ -75,6 +75,15 @@ export type _Function_basePointer = NonNullable<Deno.PointerValue> & {
   [_Function_base]: unknown;
 };
 
+export const _Invoker_typeT = {
+  parameters: [ptr(_Any_dataT), ...TypeParameter_0_1.map(ptr)],
+  result: TypeParameter_0_0,
+} as const;
+declare const _Invoker_type_: unique symbol;
+export type _Invoker_type = NonNullable<Deno.PointerValue> & {
+  [_Invoker_type_]: unknown;
+};
+
 declare const functionTemplate: unique symbol;
 declare const function__Signature: unique symbol;
 export type functionPointer<Signature extends Deno.UnsafeCallbackDefinition> =
@@ -89,10 +98,7 @@ export const functionT = <
   return {
     struct: [
       _Function_baseT, // base class, size 24, align 8
-      func({
-        parameters: [ptr(_Any_dataT), ...argTypes.map(ptr)],
-        result: res,
-      }), // _M_invoker
+      func(_Invoker_typeT), // _M_invoker
     ],
   } as const;
 };

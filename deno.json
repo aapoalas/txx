@@ -3,6 +3,6 @@
     "include": ["tests"]
   },
   "tasks": {
-    "test": "LIBCLANG_PATH=/usr/lib deno test --unstable -A"
+    "test": "LIBCLANG_PATH=/lib64 deno test --unstable -A"
   }
 }

@@ -510,6 +510,14 @@ const visitUnexposedType = (context: Context, type: CXType) => {
       } satisfies TemplateParameter;
     }
 
+    return {
+      name: type.getSpelling(),
+      kind: "<T>",
+      isSpread: false,
+      isRef: false,
+    } satisfies TemplateParameter;
+    console.log(type.getSpelling(), type.getTypeDeclaration()?.getPrettyPrinted());
+    Deno.exit(1);
     throw new Error(
       "Unexpected: Found unexposed non-template type that was is not a type parameter",
     );

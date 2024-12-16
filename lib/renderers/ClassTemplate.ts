@@ -188,6 +188,9 @@ const generateDestructuring = (
       } = ${param.name};`;
     }
   }
+  // @ts-expect-error asd
+  return parameterObjects.map(x => `const ${x.name} = ${x.paramType.name};`).join("\n");
+  console.log(parameterObjects);
   throw new Error("Unknown template type check kind");
 };
 
